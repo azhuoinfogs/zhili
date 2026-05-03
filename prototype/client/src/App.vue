@@ -26,8 +26,19 @@ const group = ref('');
 /** landing 首页 → tags 标签选择 → browse 推荐列表 */
 const phase = ref('landing');
 const loading = ref(false);
+const loadingMore = ref(false);
+const refreshing = ref(false);
+const hasMore = ref(true);
+const PAGE_SIZE = 20;
 const products = ref([]);
 const modalProduct = ref(null);
+const modalSlideIndex = ref(0);
+const relatedProducts = ref([]);
+const browseScrollRef = ref(null);
+const pullDistance = ref(0);
+let pullArm = false;
+let pullStartY = 0;
+let loadMoreLock = false;
 const seenImp = new Set();
 const toastMsg = ref('');
 let toastTimer = null;
@@ -134,29 +145,51 @@ function shelfQueryString() {
   return q.toString();
 }
 
-async function fetchRecommendations() {
-  loading.value = true;
+async function fetchRecommendations(reset = false) {
+  if (reset) {
+    loading.value = true;
+    hasMore.value = true;
+    products.value = [];
+  } else {
+    if (!hasMore.value || loadingMore.value || loading.value) return;
+    loadingMore.value = true;
+  }
+  const offset = reset ? 0 : products.value.length;
   try {
     const shelf = {
       occasion: listFilters.occasion || '',
       budget: listFilters.budget || '',
       style: listFilters.style || ''
     };
+    let chunk = [];
     if (group.value === 'A') {
-      const qs = shelfQueryString();
-      const r = await fetch('/api/hot' + (qs ? '?' + qs : ''));
-      products.value = await r.json();
+      const q = new URLSearchParams(shelfQueryString());
+      q.set('offset', String(offset));
+      q.set('limit', String(PAGE_SIZE));
+      const r = await fetch('/api/hot?' + q.toString());
+      chunk = await r.json();
     } else {
       const r = await fetch('/api/personalized', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...profilePayload.value, shelf })
+        body: JSON.stringify({
+          ...profilePayload.value,
+          shelf,
+          offset,
+          limit: PAGE_SIZE
+        })
       });
-      products.value = await r.json();
+      chunk = await r.json();
     }
+    if (reset) products.value = chunk;
+    else products.value = products.value.concat(chunk);
+    hasMore.value = chunk.length >= PAGE_SIZE;
     setupImpressionObserver();
   } finally {
     loading.value = false;
+    loadingMore.value = false;
+    refreshing.value = false;
+    pullDistance.value = 0;
   }
 }
 
@@ -164,7 +197,7 @@ function scheduleRefetch() {
   if (phase.value !== 'browse') return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    fetchRecommendations();
+    fetchRecommendations(true);
   }, 500);
 }
 
@@ -196,7 +229,60 @@ async function submitTags() {
   listFilters.budget = form.budget;
   listFilters.style = form.style;
   phase.value = 'browse';
-  await fetchRecommendations();
+  await fetchRecommendations(true);
+}
+
+function onBrowseScroll() {
+  const el = browseScrollRef.value;
+  if (!el || loading.value || loadingMore.value || !hasMore.value) return;
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < 120) {
+    void loadMore();
+  }
+}
+
+async function loadMore() {
+  if (loadMoreLock || !hasMore.value || loadingMore.value || loading.value) return;
+  loadMoreLock = true;
+  try {
+    await fetchRecommendations(false);
+  } finally {
+    loadMoreLock = false;
+  }
+}
+
+function onPullStart(e) {
+  const el = browseScrollRef.value;
+  if (!el || loading.value) return;
+  if (el.scrollTop <= 0) {
+    pullArm = true;
+    pullStartY = e.touches[0].clientY;
+  }
+}
+
+function onPullMove(e) {
+  if (!pullArm) return;
+  const el = browseScrollRef.value;
+  if (!el) return;
+  const dy = e.touches[0].clientY - pullStartY;
+  if (dy > 0 && el.scrollTop <= 0) {
+    pullDistance.value = Math.min(dy * 0.45, 72);
+    if (pullDistance.value > 10) e.preventDefault();
+  }
+}
+
+function onPullEnd() {
+  if (!pullArm) {
+    pullDistance.value = 0;
+    return;
+  }
+  pullArm = false;
+  if (pullDistance.value > 44) {
+    refreshing.value = true;
+    track('pull_refresh', {});
+    void fetchRecommendations(true);
+  } else {
+    pullDistance.value = 0;
+  }
 }
 
 function clearListFilters() {
@@ -227,13 +313,50 @@ function setupImpressionObserver() {
   });
 }
 
-function openDetail(p, pos) {
+async function openDetail(p, pos) {
   track('click', { product_id: p.id, position: pos });
   modalProduct.value = { ...p, _pos: pos };
+  modalSlideIndex.value = 0;
+  relatedProducts.value = [];
+  try {
+    const q = encodeURIComponent(JSON.stringify(profilePayload.value));
+    const r = await fetch(`/api/related/${encodeURIComponent(p.id)}?profile=${q}`);
+    if (r.ok) relatedProducts.value = await r.json();
+  } catch {
+    relatedProducts.value = [];
+  }
+}
+
+function modalImages(p) {
+  if (!p) return [];
+  if (Array.isArray(p.images) && p.images.length) return p.images;
+  return p.image ? [p.image] : [];
+}
+
+function prevModalSlide() {
+  const imgs = modalImages(modalProduct.value);
+  if (!imgs.length) return;
+  modalSlideIndex.value = (modalSlideIndex.value - 1 + imgs.length) % imgs.length;
+}
+
+function nextModalSlide() {
+  const imgs = modalImages(modalProduct.value);
+  if (!imgs.length) return;
+  modalSlideIndex.value = (modalSlideIndex.value + 1) % imgs.length;
+}
+
+function openRelatedFromModal(p) {
+  const idx = products.value.findIndex((x) => x.id === p.id);
+  closeDetail();
+  requestAnimationFrame(() => {
+    void openDetail(p, idx >= 0 ? idx : 0);
+  });
 }
 
 function closeDetail() {
   modalProduct.value = null;
+  relatedProducts.value = [];
+  modalSlideIndex.value = 0;
 }
 
 function onCollect(p) {
@@ -366,7 +489,7 @@ onUnmounted(() => {
       </main>
     </section>
 
-    <!-- 3. 推荐列表 -->
+    <!-- 3. 推荐列表（可滚动、下拉刷新、触底分页） -->
     <section v-else class="browse-screen" :aria-busy="loading">
       <header class="browse-head glass">
         <button type="button" class="link-ghost" @click="backToTags">← 调整标签</button>
@@ -374,80 +497,113 @@ onUnmounted(() => {
         <p class="browse-meta">{{ group === 'A' ? '典藏热门序列' : '个性化策展序列' }}</p>
       </header>
 
-      <div class="filter-bar glass">
-        <p class="filter-eyebrow">Refine</p>
-        <div class="filter-row">
-          <label class="filter-label" for="flt-occ">场合</label>
-          <select id="flt-occ" v-model="listFilters.occasion" class="lx-input sm">
-            <option value="">全部</option>
-            <option value="birthday">生日</option>
-            <option value="anniversary">纪念日</option>
-            <option value="festival">节日</option>
-            <option value="thanks">感谢</option>
-            <option value="apology">道歉</option>
-            <option value="casual">无理由</option>
-          </select>
+      <div
+        ref="browseScrollRef"
+        class="browse-scroll"
+        @scroll.passive="onBrowseScroll"
+        @touchstart.passive="onPullStart"
+        @touchmove="onPullMove"
+        @touchend.passive="onPullEnd"
+        @touchcancel.passive="onPullEnd"
+      >
+        <div class="pull-indicator" :style="{ height: pullDistance + 'px', opacity: pullDistance > 4 ? 1 : 0 }">
+          <span v-if="refreshing" class="pull-text">刷新中…</span>
+          <span v-else-if="pullDistance > 44" class="pull-text">松开刷新</span>
+          <span v-else-if="pullDistance > 8" class="pull-text">下拉刷新</span>
         </div>
-        <div class="filter-row">
-          <label class="filter-label" for="flt-bud">预算</label>
-          <select id="flt-bud" v-model="listFilters.budget" class="lx-input sm">
-            <option value="">全部</option>
-            <option value="lt100">&lt;100</option>
-            <option value="100-300">100–300</option>
-            <option value="300-500">300–500</option>
-            <option value="500-1000">500–1000</option>
-            <option value="1000+">1000+</option>
-          </select>
-        </div>
-        <div class="filter-row">
-          <label class="filter-label" for="flt-style">风格</label>
-          <select id="flt-style" v-model="listFilters.style" class="lx-input sm">
-            <option value="">全部</option>
-            <option value="practical">实用</option>
-            <option value="ritual">仪式</option>
-            <option value="quirky">搞怪</option>
-            <option value="warm">温情</option>
-          </select>
-        </div>
-        <button type="button" class="filter-clear" @click="clearListFilters">清空筛选</button>
-      </div>
 
-      <div v-if="loading" class="skeleton-grid" aria-hidden="true">
-        <div v-for="n in 6" :key="n" class="sk-card glass">
-          <div class="sk-img" />
-          <div class="sk-line sk-w90" />
-          <div class="sk-line sk-w50" />
-        </div>
-      </div>
-
-      <div v-else-if="products.length === 0" class="empty-state glass">
-        <p class="empty-title font-serif">暂无契合之选</p>
-        <p class="empty-desc">请尝试放宽筛选，或返回调整标签。</p>
-        <button type="button" class="cta-outline" @click="clearListFilters">清空筛选</button>
-      </div>
-
-      <div v-else class="grid">
-        <article
-          v-for="(p, idx) in products"
-          :key="p.id"
-          class="product-card glass"
-          data-imp-card="1"
-          :data-id="p.id"
-          :data-pos="idx"
-          @click="openDetail(p, idx)"
-        >
-          <div class="thumb-wrap">
-            <img :src="p.image" :alt="p.title" class="thumb" loading="lazy" decoding="async" />
+        <div class="filter-bar glass">
+          <p class="filter-eyebrow">Refine</p>
+          <div class="filter-row">
+            <label class="filter-label" for="flt-occ">场合</label>
+            <select id="flt-occ" v-model="listFilters.occasion" class="lx-input sm">
+              <option value="">全部</option>
+              <option value="birthday">生日</option>
+              <option value="anniversary">纪念日</option>
+              <option value="festival">节日</option>
+              <option value="thanks">感谢</option>
+              <option value="apology">道歉</option>
+              <option value="casual">无理由</option>
+            </select>
           </div>
-          <div class="info">
-            <h3 class="p-title">{{ p.title }}</h3>
-            <p class="p-price">¥{{ p.price }}</p>
-            <p v-if="p.reasons && p.reasons[0]" class="p-reason">{{ p.reasons[0].icon }} {{ p.reasons[0].text }}</p>
+          <div class="filter-row">
+            <label class="filter-label" for="flt-bud">预算</label>
+            <select id="flt-bud" v-model="listFilters.budget" class="lx-input sm">
+              <option value="">全部</option>
+              <option value="lt100">&lt;100</option>
+              <option value="100-300">100–300</option>
+              <option value="300-500">300–500</option>
+              <option value="500-1000">500–1000</option>
+              <option value="1000+">1000+</option>
+            </select>
           </div>
-        </article>
-      </div>
+          <div class="filter-row">
+            <label class="filter-label" for="flt-style">风格</label>
+            <select id="flt-style" v-model="listFilters.style" class="lx-input sm">
+              <option value="">全部</option>
+              <option value="practical">实用</option>
+              <option value="ritual">仪式</option>
+              <option value="quirky">搞怪</option>
+              <option value="warm">温情</option>
+            </select>
+          </div>
+          <button type="button" class="filter-clear" @click="clearListFilters">清空筛选</button>
+        </div>
 
-      <footer class="browse-foot">匿名数据仅用于礼遇算法优化</footer>
+        <div v-if="loading" class="skeleton-grid" aria-hidden="true">
+          <div v-for="n in 6" :key="n" class="sk-card glass">
+            <div class="sk-img" />
+            <div class="sk-line sk-w90" />
+            <div class="sk-line sk-w50" />
+          </div>
+        </div>
+
+        <div v-else-if="products.length === 0" class="empty-state glass">
+          <div class="empty-art" aria-hidden="true">
+            <svg viewBox="0 0 120 120" class="empty-svg" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color: #ca8a04; stop-opacity: 0.35" />
+                  <stop offset="100%" style="stop-color: #57534e; stop-opacity: 0.2" />
+                </linearGradient>
+              </defs>
+              <rect x="18" y="28" width="84" height="64" rx="4" fill="none" stroke="url(#g)" stroke-width="1.5" />
+              <path d="M38 48 L52 62 L82 36" fill="none" stroke="#ca8a04" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
+              <circle cx="60" cy="96" r="3" fill="#78716c" opacity="0.6" />
+            </svg>
+          </div>
+          <p class="empty-title font-serif">暂无契合之选</p>
+          <p class="empty-desc">请尝试放宽筛选，或返回调整标签。</p>
+          <button type="button" class="cta-outline" @click="clearListFilters">清空筛选</button>
+        </div>
+
+        <template v-else>
+          <div class="grid">
+            <article
+              v-for="(p, idx) in products"
+              :key="p.id"
+              class="product-card glass"
+              data-imp-card="1"
+              :data-id="p.id"
+              :data-pos="idx"
+              @click="openDetail(p, idx)"
+            >
+              <div class="thumb-wrap">
+                <img :src="p.image" :alt="p.title" class="thumb" loading="lazy" decoding="async" />
+              </div>
+              <div class="info">
+                <h3 class="p-title">{{ p.title }}</h3>
+                <p class="p-price">¥{{ p.price }}</p>
+                <p v-if="p.reasons && p.reasons[0]" class="p-reason">{{ p.reasons[0].icon }} {{ p.reasons[0].text }}</p>
+              </div>
+            </article>
+          </div>
+          <div v-if="loadingMore" class="load-more-bar" aria-live="polite">加载更多…</div>
+          <div v-else-if="!hasMore && products.length > 0" class="load-more-end">已展示全部候选</div>
+        </template>
+
+        <footer class="browse-foot">匿名数据仅用于礼遇算法优化</footer>
+      </div>
     </section>
 
     <!-- 详情抽屉 -->
@@ -455,9 +611,30 @@ onUnmounted(() => {
       <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="detail-title">
         <div class="modal-handle" aria-hidden="true" />
         <button type="button" class="modal-close" aria-label="关闭" @click="closeDetail">×</button>
-        <div class="modal-hero">
-          <img :src="modalProduct.image" class="modal-img" :alt="modalProduct.title" loading="lazy" />
+        <div class="modal-carousel">
+          <button type="button" class="car-btn prev" aria-label="上一张" @click.stop="prevModalSlide">‹</button>
+          <div class="modal-hero">
+            <img
+              :src="modalImages(modalProduct)[modalSlideIndex]"
+              class="modal-img"
+              :alt="modalProduct.title + ' 图' + (modalSlideIndex + 1)"
+              loading="lazy"
+            />
+          </div>
+          <button type="button" class="car-btn next" aria-label="下一张" @click.stop="nextModalSlide">›</button>
         </div>
+        <div v-if="modalImages(modalProduct).length > 1" class="car-dots">
+          <button
+            v-for="(_, i) in modalImages(modalProduct)"
+            :key="i"
+            type="button"
+            class="car-dot"
+            :class="{ on: i === modalSlideIndex }"
+            :aria-label="'第' + (i + 1) + '张'"
+            @click.stop="modalSlideIndex = i"
+          />
+        </div>
+        <p v-if="modalImages(modalProduct).length > 1" class="car-hint">左右滑动或点击箭头浏览多图</p>
         <h3 id="detail-title" class="detail-name font-serif">{{ modalProduct.title }}</h3>
         <p class="detail-price">¥{{ modalProduct.price }}</p>
         <p class="detail-label">推荐理由</p>
@@ -465,6 +642,21 @@ onUnmounted(() => {
           <div v-for="(r, i) in modalProduct.reasons" :key="i" class="reason-glass">
             <span class="reason-ico" aria-hidden="true">{{ r.icon }}</span>
             <span>{{ r.text }}</span>
+          </div>
+        </div>
+        <div v-if="relatedProducts.length" class="related-block">
+          <p class="related-label">类似礼遇</p>
+          <div class="related-strip">
+            <button
+              v-for="rp in relatedProducts"
+              :key="rp.id"
+              type="button"
+              class="related-card"
+              @click.stop="openRelatedFromModal(rp)"
+            >
+              <img :src="rp.image" class="related-thumb" :alt="rp.title" loading="lazy" />
+              <span class="related-name">{{ rp.title }}</span>
+            </button>
           </div>
         </div>
         <div class="modal-actions">
@@ -774,12 +966,48 @@ onUnmounted(() => {
 
 /* —— Browse —— */
 .browse-screen {
-  padding: 16px 16px 80px;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-height: 100vh;
+  padding: 16px 0 0;
+  box-sizing: border-box;
+}
+.browse-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 80px;
+  touch-action: pan-y;
+}
+.pull-indicator {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  overflow: hidden;
+  transition: height 0.12s ease-out;
+  color: #ca8a04;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+}
+.pull-text {
+  padding-bottom: 6px;
+}
+.load-more-bar,
+.load-more-end {
+  text-align: center;
+  font-size: 11px;
+  color: #78716c;
+  letter-spacing: 0.12em;
+  padding: 16px 0 8px;
 }
 .browse-head {
   padding: 16px 18px;
   border-radius: 2px;
-  margin-bottom: 12px;
+  margin: 0 16px 12px;
+  flex-shrink: 0;
 }
 .browse-title {
   margin: 8px 0 0;
@@ -874,6 +1102,16 @@ onUnmounted(() => {
   text-align: center;
   padding: 36px 20px;
   border-radius: 2px;
+}
+.empty-art {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.empty-svg {
+  width: 120px;
+  height: 120px;
+  opacity: 0.95;
 }
 .empty-title {
   margin: 0;
@@ -1002,6 +1240,107 @@ onUnmounted(() => {
   background: #57534e;
   margin: 12px auto 8px;
   border-radius: 2px;
+}
+.modal-carousel {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 0;
+}
+.modal-carousel .modal-hero {
+  width: 100%;
+  margin: 0;
+}
+.car-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 36px;
+  height: 48px;
+  border: none;
+  background: rgba(12, 10, 9, 0.45);
+  color: #fafaf9;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.car-btn.prev {
+  left: 8px;
+}
+.car-btn.next {
+  right: 8px;
+}
+.car-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0 0;
+}
+.car-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: #44403c;
+  cursor: pointer;
+}
+.car-dot.on {
+  background: #eab308;
+}
+.car-hint {
+  margin: 4px 20px 0;
+  font-size: 10px;
+  color: #57534e;
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+.related-block {
+  margin: 20px 0 0;
+  padding: 0 12px;
+}
+.related-label {
+  margin: 0 0 10px 8px;
+  font-size: 10px;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: #78716c;
+}
+.related-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+}
+.related-card {
+  flex: 0 0 88px;
+  scroll-snap-align: start;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 10, 9, 0.5);
+  border-radius: 2px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  color: #d6d3d1;
+}
+.related-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+.related-name {
+  display: block;
+  font-size: 9px;
+  line-height: 1.35;
+  padding: 6px 6px 8px;
+  max-height: 2.8em;
+  overflow: hidden;
 }
 .modal-close {
   position: absolute;

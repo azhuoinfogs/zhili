@@ -92,24 +92,34 @@ function sortHot(a, b) {
   return (a.hotRank ?? 999) - (b.hotRank ?? 999) || String(a.id).localeCompare(String(b.id));
 }
 
-/** 稳定热门：按 hotRank；支持筛选；无结果时回退全池 */
+function parsePaging(q) {
+  const limit = Math.min(50, Math.max(1, parseInt(String(q.limit || '20'), 10) || 20));
+  const offset = Math.max(0, parseInt(String(q.offset || '0'), 10) || 0);
+  return { limit, offset };
+}
+
+/** 稳定热门：按 hotRank；支持筛选；无结果时回退全池；支持 offset/limit 分页 */
 app.get('/api/hot', (req, res) => {
   const q = req.query || {};
+  const { limit, offset } = parsePaging(q);
   const shelf = { occasion: q.occasion, budget: q.budget, style: q.style };
   let pool = filterShelf(productsData, shelf);
   if (!pool.length) pool = productsData;
-  const list = [...pool].sort(sortHot).slice(0, 20).map((p) => enrich(p));
+  const sorted = [...pool].sort(sortHot);
+  const list = sorted.slice(offset, offset + limit).map((p) => enrich(p));
   res.json(list);
 });
 
 app.post('/api/personalized', (req, res) => {
   const body = req.body || {};
-  const { shelf, ...profile } = body;
+  const { shelf, limit: limIn, offset: offIn, ...profile } = body;
+  const limit = Math.min(50, Math.max(1, parseInt(String(limIn ?? 20), 10) || 20));
+  const offset = Math.max(0, parseInt(String(offIn ?? 0), 10) || 0);
   const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
   let pool = filterShelf(productsData, shelfQ);
   if (!pool.length) pool = productsData;
 
-  const scored = pool
+  let rows = pool
     .map((p) => ({
       item: { ...enrich(p, profile), score: computeScore(p, profile) },
       hotRank: p.hotRank ?? 999,
@@ -117,21 +127,65 @@ app.post('/api/personalized', (req, res) => {
     }))
     .sort((a, b) => b.item.score - a.item.score || a.hotRank - b.hotRank);
 
-  let top = scored.slice(0, 20);
-  if (top.length < 20) {
-    const used = new Set(top.map((x) => x.id));
+  /** 第一页结果过少时用热门补足列表长度，便于分页与曝光 */
+  if (offset === 0 && rows.length < limit) {
+    const used = new Set(rows.map((x) => x.id));
     const filler = [...productsData]
       .sort(sortHot)
       .filter((p) => !used.has(p.id))
-      .slice(0, 20 - top.length)
+      .slice(0, Math.max(0, limit - rows.length))
       .map((p) => ({
         item: { ...enrich(p, profile), score: computeScore(p, profile) },
         hotRank: p.hotRank ?? 999,
         id: p.id
       }));
-    top = top.concat(filler);
+    rows = rows.concat(filler);
   }
-  res.json(top.map((x) => x.item));
+
+  const page = rows.slice(offset, offset + limit).map((x) => x.item);
+  res.json(page);
+});
+
+/** 类似推荐：同场合/兴趣/风格接近，排除自身；profile 可选 JSON（query）用于理由 */
+app.get('/api/related/:id', (req, res) => {
+  const id = req.params.id;
+  const self = productsData.find((p) => p.id === id);
+  if (!self) {
+    res.status(404).json([]);
+    return;
+  }
+  let profile = null;
+  if (req.query.profile) {
+    try {
+      profile = JSON.parse(String(req.query.profile));
+    } catch {
+      profile = null;
+    }
+  }
+  function overlapScore(a, b) {
+    let s = 0;
+    const oa = new Set(a.occasions || []);
+    for (const o of b.occasions || []) {
+      if (oa.has(o)) s += 3;
+    }
+    const ia = new Set(a.interests || []);
+    for (const i of b.interests || []) {
+      if (ia.has(i)) s += 2;
+    }
+    const sa = new Set(a.styles || []);
+    for (const st of b.styles || []) {
+      if (sa.has(st)) s += 2;
+    }
+    s += (300 - Math.min(b.hotRank ?? 300, 300)) * 0.01;
+    return s;
+  }
+  const list = productsData
+    .filter((p) => p.id !== id)
+    .map((p) => ({ p, s: overlapScore(self, p) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 8)
+    .map((x) => enrich(x.p, profile));
+  res.json(list);
 });
 
 function ensureCsvHeader() {
@@ -187,13 +241,25 @@ app.get('/api/health', (req, res) => {
   res.json({ ok: true, products: productsData.length });
 });
 
+function productImages(p) {
+  const base = p.image || `https://picsum.photos/seed/${encodeURIComponent(p.id)}/400/400`;
+  if (Array.isArray(p.images) && p.images.length) return p.images.slice(0, 6).map(String);
+  return [
+    base,
+    `https://picsum.photos/seed/${encodeURIComponent(p.id)}a/400/400`,
+    `https://picsum.photos/seed/${encodeURIComponent(p.id)}b/400/400`
+  ];
+}
+
 function enrich(p, profile) {
   const reasons = profile ? buildReasonLines(p, profile) : [{ icon: '🎁', text: p.sellPoint || '热门精选' }];
+  const images = productImages(p);
   return {
     id: p.id,
     title: p.title,
     price: p.price,
-    image: p.image,
+    image: images[0],
+    images,
     sellPoint: p.sellPoint,
     reasons
   };

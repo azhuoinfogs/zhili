@@ -2,7 +2,7 @@
 
 本文档与 [`plan0.md`](plan0.md)（验证流程）、[`prd_v0.md`](prd_v0.md)（产品需求）对齐，描述本仓库 **`prototype/`** 目录下的可运行实现。PRD 中小程序正式稿的视觉以 **PRD §5.2**（浅色、主色 `#FF6B6B` 等）为准；本 H5 验证端为便于传播与 A/B 实验，采用 **深色「礼遇艺廊」主题**（参考 UI/UX Pro Max 奢侈品电商方向），字段与接口与 PRD 一致。
 
-**与仓库同步（快照）**：2026-05-02 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：120**；小程序骨架 `mp-weixin` 三页可导入开发者工具。整体排期与「已做 / 未做」见 **[develop2.md](develop2.md)** 篇首 **「当前开发状态」**。
+**与仓库同步（快照）**：2026-05-02 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：200**（`node scripts/generate-products.mjs 200`）；列表支持 **下拉刷新、触底分页**；详情 **多图 + 类似推荐** 见 API。整体排期见 **[develop2.md](develop2.md)** 篇首 **「当前开发状态」**。
 
 ---
 
@@ -37,12 +37,13 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/health` | 健康检查 |
-| `GET` | `/api/hot` | 对照组；Query：`occasion`、`budget`、`style` 与列表筛选一致 |
-| `POST` | `/api/personalized` | 实验组；Body：画像字段 + `shelf`（同上） |
+| `GET` | `/api/hot` | 对照组；Query：`occasion`、`budget`、`style`；**`offset`（默认 0）、`limit`（默认 20，最大 50）** 分页 |
+| `POST` | `/api/personalized` | 实验组；Body：画像字段 + `shelf` + **`offset` / `limit`**（同上） |
+| `GET` | `/api/related/:id` | 类似推荐；Query：可选 **`profile`**（JSON 字符串，与 `personalized` 画像一致时理由更准） |
 | `POST` | `/api/collect` | 埋点上报（JSON 单行事件） |
 | `GET` | `/api/export/events.csv` | 导出事件 |
 
-打分与理由模板见 PRD **§4.3 / §4.4**，实现见 `prototype/server/scoring.js`。
+打分与理由模板见 PRD **§4.3 / §4.4**，实现见 `prototype/server/scoring.js`。列表/详情商品对象含 **`image`**（首图）与 **`images`**（多图 URL 数组，至少 3 张由服务端生成）。
 
 ---
 
@@ -59,6 +60,7 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 |------|------|----------|
 | `page_view` | 应用挂载 | `user_id`, `group`, `page_name`, `timestamp` |
 | `explore_click` | 首屏点击「探索商品」 | 同上 |
+| `pull_refresh` | 列表页顶部下拉松手刷新 | 同上 |
 | `form_submit` | 提交画像并进入推荐流 | 画像字段 |
 | `impression` | 卡片约 40% 可见 | `product_id`, `position` |
 | `click` | 打开详情 | `product_id`, `position` |

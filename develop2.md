@@ -1,6 +1,6 @@
 # 知礼 · 整合开发计划（develop2）
 
-**版本**：v2.3  
+**版本**：v2.4  
 **更新**：2026-05-02  
 **状态**：待评审  
 
@@ -14,12 +14,12 @@
 
 | 域 | 状态 | 说明 |
 |----|------|------|
-| **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；骨架屏、Toast、详情抽屉；空状态 + 清空筛选；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备** | `GET /api/hot`、`POST /api/personalized`、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；端口顺延与 `.listen-port` 见 README |
-| **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 120 条**（`id` 计数） |
+| **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
+| **API** | **已具备** | `GET /api/hot`、`POST /api/personalized`（均支持 **`offset`/`limit`** 分页，默认 20、最大 50）、**`GET /api/related/:id`**（类似推荐）、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；列表项含 **`images` 数组**（3 图，无则服务端派生） |
+| **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条** |
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
-| **develop.md 阶段 A** | **未开工** | 下拉刷新、触底分页、详情多图/类似推荐、空状态插画、商品池扩至 ~200 |
+| **develop.md 阶段 A** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐 |
 | **develop1 MVP 后端** | **未开工** | MySQL / Redis / 微信登录 / 收藏 CRUD / 联盟转链 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
@@ -59,9 +59,9 @@
 
 | 模块 | 已实现 | 仍为缺口 |
 |------|--------|----------|
-| H5 | 同快照表 | 下拉刷新、触底分页、详情多图/类似款、多画像 |
+| H5 | 同快照表 | 多画像、微信登录、收藏列表持久化 |
 | API | 同快照表 | develop1 风格登录/画像/收藏/转链 REST |
-| 数据 | **120** 条商品 JSON | 扩至 ~200、多图字段、联盟字段 |
+| 数据 | **200** 条商品 JSON；API 返回 `images[]` | 联盟字段、运营后台 |
 | 小程序 | 三页 + PRD 色顶栏 | WeUI 全量、登录、与 H5 同等交互、埋点全量 |
 | 后台 / 联盟 | — | develop1 §3.2、CPS、MySQL/Redis |
 
