@@ -2,6 +2,8 @@
 
 基于根目录 `prototype-spec.md` 与 `prototype-client-App-vue.md` 落地。
 
+**界面方向（PRD 5.2 + UI/UX Pro Max）**：礼品场景按 *E-commerce* 类「清晰层级 + 双列 feed + 块状筛选」组织；品牌色固定为文档中的 `#FF6B6B` / `#FFA500`，辅以骨架屏、Toast、懒加载与可见焦点，贴近微信小程序心智的轻量移动页。
+
 ## 启动（务必先 API，再前端）
 
 终端 1（API，默认从 3000 起占用；若被占用会自动顺延，并写入 `server/.listen-port`）：
