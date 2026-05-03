@@ -1,8 +1,10 @@
 # 知礼 · 前置验证（最小 H5）
 
-基于根目录 `prototype-spec.md` 与 `prototype-client-App-vue.md` 落地。
+实现说明与接口、埋点、页面阶段以仓库根目录 **[`prototype-spec.md`](../prototype-spec.md)** 为准；Vue 单文件结构说明见 **[`prototype-client-App-vue.md`](../prototype-client-App-vue.md)**。
 
-**界面方向（PRD 5.2 + UI/UX Pro Max）**：礼品场景按 *E-commerce* 类「清晰层级 + 双列 feed + 块状筛选」组织；品牌色固定为文档中的 `#FF6B6B` / `#FFA500`，辅以骨架屏、Toast、懒加载与可见焦点，贴近微信小程序心智的轻量移动页。
+**界面方向**：推荐流按 PRD **F2**（双列、图片/标题/价格/理由、顶部场合·预算·风格筛选、骨架屏、Toast、懒加载、`500ms` 防抖）组织。本 H5 为验证传播与 A/B，采用 **深色礼遇艺廊** 视觉（金色点缀）；**正式微信小程序视觉以 PRD §5.2 为准**（主色 `#FF6B6B`、浅底等）。
+
+**页面流程**：`landing`（可选品牌首屏）→ `tags`（画像与标签）→ `browse`（推荐列表）→ 详情抽屉。与 [`plan0.md`](../plan0.md) 最小三屏的对应关系见 `prototype-spec.md` §2。
 
 ## 启动（务必先 API，再前端）
 
@@ -28,9 +30,11 @@ npm run dev
 
 1. **在 `server` 里执行 `npm run dev`**：会再次启动 `node index.js`（API），不是前端。前端请 **`cd prototype/client`** 再 `npm run dev`。
 2. **PowerShell 设置带 URL 的环境变量必须加引号**，否则 `http://` 会被误解析：
+
    ```powershell
    $env:VITE_API_TARGET = 'http://127.0.0.1:3003'
    ```
+
    推荐：先启动 API（会写 `.listen-port`），再在 `client` 里直接 `npm run dev`，通常无需手设变量。
 
 ## `npm start` 报 EADDRINUSE
@@ -43,7 +47,7 @@ npm run dev
 
 ## 埋点
 
-事件写入 `server/data/events.jsonl`（每行一条 JSON）。分析流程见根目录 `plan0.md`。
+事件写入 `server/data/events.jsonl`（每行一条 JSON）。事件表见 `prototype-spec.md` §5；分析流程见根目录 [`plan0.md`](../plan0.md)。
 
 ## A/B 说明
 
@@ -71,4 +75,4 @@ npm run gen:products
 
 ## 微信小程序骨架（v1 预览）
 
-见 [`mp-weixin/README.md`](mp-weixin/README.md)，与 H5 共用同一套 API 契约。
+见 [`mp-weixin/README.md`](mp-weixin/README.md)（含与 **`prototype-spec.md`**、PRD §5.2 的对照说明），与 H5 共用同一套 API 契约。

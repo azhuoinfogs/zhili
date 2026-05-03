@@ -1,2 +1,4 @@
 **/node_modules/
 server/data/events.jsonl
+server/data/events.csv
+server/.listen-port

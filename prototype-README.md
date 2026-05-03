@@ -1,8 +1,8 @@
 # 知礼 · 前置验证（最小 H5）
 
-源码请按 [prototype-spec.md](prototype-spec.md) 生成 `prototype/server` 与 `prototype/client`；Vue 单文件完整示例见 [prototype-client-App-vue.md](prototype-client-App-vue.md)。
+工程规格与 API、埋点、页面阶段见 **[prototype-spec.md](prototype-spec.md)**；Vue 实现说明见 **[prototype-client-App-vue.md](prototype-client-App-vue.md)**。分阶段开发路线见 **[develop.md](develop.md)**。启动与目录说明见 **[prototype/README.md](prototype/README.md)**。
 
-## 快速开始（生成文件后）
+## 快速开始
 
 1. 终端一：`cd prototype/server && npm install && npm start`
 2. 终端二：`cd prototype/client && npm install && npm run dev`
