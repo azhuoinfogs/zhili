@@ -1,6 +1,6 @@
 # 知礼 · 前置验证（最小 H5）
 
-工程规格与 API、埋点、页面阶段见 **[prototype-spec.md](prototype-spec.md)**；Vue 实现说明见 **[prototype-client-App-vue.md](prototype-client-App-vue.md)**。分阶段开发路线见 **[develop.md](develop.md)**。启动与目录说明见 **[prototype/README.md](prototype/README.md)**。
+工程规格与 API、埋点、页面阶段见 **[prototype-spec.md](prototype-spec.md)**；Vue 实现说明见 **[prototype-client-App-vue.md](prototype-client-App-vue.md)**。整合开发计划见 **[develop2.md](develop2.md)**；PRD 细对照见 **[develop.md](develop.md)**。启动与目录说明见 **[prototype/README.md](prototype/README.md)**。
 
 ## 快速开始
 

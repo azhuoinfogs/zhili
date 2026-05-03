@@ -1,5 +1,7 @@
 # 知礼 H5 验证端 · Vue 实现说明
 
+**仓库进度快照**：[develop2.md](develop2.md) 篇首「当前开发状态」。
+
 完整界面与交互集中在单文件：
 
 **[`prototype/client/src/App.vue`](prototype/client/src/App.vue)**

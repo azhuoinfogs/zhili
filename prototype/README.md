@@ -1,6 +1,6 @@
 # 知礼 · 前置验证（最小 H5）
 
-实现说明与接口、埋点、页面阶段以仓库根目录 **[`prototype-spec.md`](../prototype-spec.md)** 为准；Vue 单文件结构说明见 **[`prototype-client-App-vue.md`](../prototype-client-App-vue.md)**。
+实现说明与接口、埋点、页面阶段以仓库根目录 **[`prototype-spec.md`](../prototype-spec.md)** 为准；Vue 单文件结构说明见 **[`prototype-client-App-vue.md`](../prototype-client-App-vue.md)**。**当前做到哪一步**（已具备 / 未开工）：[`develop2.md`](../develop2.md) 篇首「当前开发状态」。
 
 **界面方向**：推荐流按 PRD **F2**（双列、图片/标题/价格/理由、顶部场合·预算·风格筛选、骨架屏、Toast、懒加载、`500ms` 防抖）组织。本 H5 为验证传播与 A/B，采用 **深色礼遇艺廊** 视觉（金色点缀）；**正式微信小程序视觉以 PRD §5.2 为准**（主色 `#FF6B6B`、浅底等）。
 
