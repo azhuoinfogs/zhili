@@ -1,0 +1,18 @@
+page {
+  background: #f8f8f8;
+  color: #1a1a1a;
+  font-size: 28rpx;
+}
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin: 24rpx;
+  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+}
+.btn-primary {
+  background: #ff6b6b;
+  color: #fff;
+  border-radius: 32rpx;
+  margin: 32rpx 24rpx;
+}

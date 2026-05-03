@@ -49,3 +49,24 @@ npm run dev
 - **B 组**：`POST /api/personalized`，PRD 4.3 加权打分 + 4.4 理由。
 
 分组保存在浏览器 `localStorage.zhili_group`。
+
+## 商品池生成
+
+默认已含 **120** 条打标数据。若需重生成：
+
+```bash
+cd prototype
+npm run gen:products
+```
+
+（数量可改：`node scripts/generate-products.mjs 160`）
+
+## 埋点导出与分析
+
+- 浏览器或 curl 下载：`GET /api/export/events.csv`
+- Python：`pip install -r analysis/requirements.txt` 后执行 `python analysis/analyze_events.py`
+- 实验流程见 [`docs/EXPERIMENT_RUNBOOK.md`](docs/EXPERIMENT_RUNBOOK.md)
+
+## 微信小程序骨架（v1 预览）
+
+见 [`mp-weixin/README.md`](mp-weixin/README.md)，与 H5 共用同一套 API 契约。

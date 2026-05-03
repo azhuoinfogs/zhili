@@ -1,0 +1,10 @@
+{
+  "miniprogramRoot": "./",
+  "compileType": "miniprogram",
+  "setting": {
+    "es6": true,
+    "minified": false
+  },
+  "appid": "wxYourTestAppId",
+  "projectname": "zhili-v1-skeleton"
+}

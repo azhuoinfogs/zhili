@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
-    "dev": "node index.js"
+    "dev": "node index.js",
+    "test": "node --test scoring.test.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",

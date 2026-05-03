@@ -1,0 +1,13 @@
+{
+  "pages": [
+    "pages/profile/profile",
+    "pages/index/index",
+    "pages/detail/detail"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#FF6B6B",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "知礼",
+    "backgroundColor": "#F8F8F8"
+  }
+}

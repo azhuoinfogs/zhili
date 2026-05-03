@@ -47,38 +47,144 @@ const PORT_RANGE = Math.min(Math.max(Number(process.env.PORT_RANGE) || 40, 1), 2
 const STRICT_PORT = String(process.env.STRICT_PORT || '') === '1';
 const dataDir = path.join(__dirname, 'data');
 const logFile = path.join(dataDir, 'events.jsonl');
+const csvFile = path.join(dataDir, 'events.csv');
+
+const BUDGET_RANGE = {
+  lt100: [0, 100],
+  '100-300': [100, 300],
+  '300-500': [300, 500],
+  '500-1000': [500, 1000],
+  '1000+': [1000, 1e9]
+};
 
 app.use(cors());
 app.use(express.json({ limit: '256kb' }));
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
-/** 稳定热门：按 hotRank 升序，同 rank 按 id */
+function priceInBudget(price, budgetKey) {
+  if (!budgetKey) return true;
+  const [lo, hi] = BUDGET_RANGE[budgetKey] || [0, 1e9];
+  const p = Number(price) || 0;
+  return p >= lo && p <= hi;
+}
+
+/** 列表筛选（PRD F2：场合 / 预算 / 风格） */
+function filterShelf(list, q) {
+  const occasion = q.occasion || '';
+  const budget = q.budget || '';
+  const style = q.style || '';
+  return list.filter((p) => {
+    if (occasion) {
+      const oc = p.occasions || [];
+      if (!oc.includes(occasion) && !oc.includes('universal')) return false;
+    }
+    if (budget && !priceInBudget(p.price, budget)) return false;
+    if (style) {
+      const st = p.styles || [];
+      if (!st.includes(style)) return false;
+    }
+    return true;
+  });
+}
+
+function sortHot(a, b) {
+  return (a.hotRank ?? 999) - (b.hotRank ?? 999) || String(a.id).localeCompare(String(b.id));
+}
+
+/** 稳定热门：按 hotRank；支持筛选；无结果时回退全池 */
 app.get('/api/hot', (req, res) => {
-  const list = [...productsData]
-    .sort((a, b) => (a.hotRank ?? 999) - (b.hotRank ?? 999) || String(a.id).localeCompare(String(b.id)))
-    .slice(0, 20)
-    .map((p) => enrich(p));
+  const q = req.query || {};
+  const shelf = { occasion: q.occasion, budget: q.budget, style: q.style };
+  let pool = filterShelf(productsData, shelf);
+  if (!pool.length) pool = productsData;
+  const list = [...pool].sort(sortHot).slice(0, 20).map((p) => enrich(p));
   res.json(list);
 });
 
 app.post('/api/personalized', (req, res) => {
-  const profile = req.body || {};
-  const scored = productsData
+  const body = req.body || {};
+  const { shelf, ...profile } = body;
+  const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
+  let pool = filterShelf(productsData, shelfQ);
+  if (!pool.length) pool = productsData;
+
+  const scored = pool
     .map((p) => ({
       item: { ...enrich(p, profile), score: computeScore(p, profile) },
-      hotRank: p.hotRank ?? 999
+      hotRank: p.hotRank ?? 999,
+      id: p.id
     }))
-    .sort((a, b) => b.item.score - a.item.score || a.hotRank - b.hotRank)
-    .slice(0, 20)
-    .map((x) => x.item);
-  res.json(scored);
+    .sort((a, b) => b.item.score - a.item.score || a.hotRank - b.hotRank);
+
+  let top = scored.slice(0, 20);
+  if (top.length < 20) {
+    const used = new Set(top.map((x) => x.id));
+    const filler = [...productsData]
+      .sort(sortHot)
+      .filter((p) => !used.has(p.id))
+      .slice(0, 20 - top.length)
+      .map((p) => ({
+        item: { ...enrich(p, profile), score: computeScore(p, profile) },
+        hotRank: p.hotRank ?? 999,
+        id: p.id
+      }));
+    top = top.concat(filler);
+  }
+  res.json(top.map((x) => x.item));
 });
 
+function ensureCsvHeader() {
+  if (!fs.existsSync(csvFile)) {
+    fs.writeFileSync(
+      csvFile,
+      'server_ts,event,user_id,group,page_name,client_ts,product_id,position,payload_json\n',
+      'utf8'
+    );
+  }
+}
+
+function csvEscape(v) {
+  if (v == null || v === '') return '';
+  const s = String(v);
+  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
 app.post('/api/collect', (req, res) => {
-  const line = JSON.stringify({ ...req.body, serverTs: Date.now() }) + '\n';
+  const body = { ...req.body, serverTs: Date.now() };
+  const line = JSON.stringify(body) + '\n';
   fs.appendFile(logFile, line, () => {});
+  ensureCsvHeader();
+  const pj = JSON.stringify(body);
+  const row =
+    [
+      csvEscape(body.serverTs),
+      csvEscape(body.event),
+      csvEscape(body.user_id),
+      csvEscape(body.group),
+      csvEscape(body.page_name),
+      csvEscape(body.timestamp),
+      csvEscape(body.product_id),
+      csvEscape(body.position),
+      csvEscape(pj)
+    ].join(',') + '\n';
+  fs.appendFile(csvFile, row, () => {});
   res.json({ ok: true });
+});
+
+app.get('/api/export/events.csv', (req, res) => {
+  if (!fs.existsSync(csvFile)) {
+    res.status(404).type('text/plain').send('暂无 events.csv，请先产生埋点');
+    return;
+  }
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="zhili_events.csv"');
+  fs.createReadStream(csvFile).pipe(res);
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, products: productsData.length });
 });
 
 function enrich(p, profile) {

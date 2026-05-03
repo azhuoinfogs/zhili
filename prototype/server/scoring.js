@@ -38,12 +38,14 @@ function occasionSub(userOccasion, productOccasions) {
   return 0;
 }
 
+/** PRD 4.3：风格 完全4 / 部分2 / 冲突0（道歉+搞怪视为冲突） */
 function styleSub(userStyle, productStyles, userOccasion) {
   const ps = productStyles || [];
   if (userOccasion === 'apology' && ps.includes('quirky')) return 0;
-  if (userStyle && ps.includes(userStyle)) return 4;
+  if (!userStyle) return ps.length === 0 ? 2 : 2;
+  if (ps.includes(userStyle)) return 4;
   if (ps.length === 0) return 2;
-  return 0;
+  return 2;
 }
 
 function situationScore(profile, product) {

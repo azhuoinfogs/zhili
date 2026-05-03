@@ -1,0 +1,9 @@
+{
+  "name": "zhili-prototype",
+  "private": true,
+  "version": "0.1.0",
+  "description": "知礼最小验证：H5 + API + 分析脚本",
+  "scripts": {
+    "gen:products": "node scripts/generate-products.mjs 120"
+  }
+}

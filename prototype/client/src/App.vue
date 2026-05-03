@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, computed, watch } from 'vue';
 
 const STORAGE_KEYS = { uid: 'zhili_vid', group: 'zhili_group', profile: 'zhili_profile' };
 
@@ -28,6 +28,14 @@ const loading = ref(false);
 const products = ref([]);
 const modalProduct = ref(null);
 const seenImp = new Set();
+
+/** 列表页筛选（PRD F2），与画像默认值同步后可独立修改 */
+const listFilters = reactive({
+  occasion: 'birthday',
+  budget: '100-300',
+  style: 'practical'
+});
+let debounceTimer = null;
 
 const form = reactive({
   relation: 'friend',
@@ -107,27 +115,70 @@ const profilePayload = computed(() => ({
   taboos: form.taboos.length ? [...form.taboos] : []
 }));
 
-async function submitForm() {
-  track('form_submit', { ...profilePayload.value });
-  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profilePayload.value));
+function shelfQueryString() {
+  const q = new URLSearchParams();
+  if (listFilters.occasion) q.set('occasion', listFilters.occasion);
+  if (listFilters.budget) q.set('budget', listFilters.budget);
+  if (listFilters.style) q.set('style', listFilters.style);
+  return q.toString();
+}
+
+async function fetchRecommendations() {
   loading.value = true;
   try {
+    const shelf = {
+      occasion: listFilters.occasion || '',
+      budget: listFilters.budget || '',
+      style: listFilters.style || ''
+    };
     if (group.value === 'A') {
-      const r = await fetch('/api/hot');
+      const qs = shelfQueryString();
+      const r = await fetch('/api/hot' + (qs ? '?' + qs : ''));
       products.value = await r.json();
     } else {
       const r = await fetch('/api/personalized', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(profilePayload.value)
+        body: JSON.stringify({ ...profilePayload.value, shelf })
       });
       products.value = await r.json();
     }
-    step.value = 1;
     setupImpressionObserver();
   } finally {
     loading.value = false;
   }
+}
+
+function scheduleRefetch() {
+  if (step.value !== 1) return;
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    fetchRecommendations();
+  }, 500);
+}
+
+watch(
+  listFilters,
+  () => {
+    scheduleRefetch();
+  },
+  { deep: true }
+);
+
+async function submitForm() {
+  track('form_submit', { ...profilePayload.value });
+  localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profilePayload.value));
+  listFilters.occasion = form.occasion;
+  listFilters.budget = form.budget;
+  listFilters.style = form.style;
+  step.value = 1;
+  await fetchRecommendations();
+}
+
+function clearListFilters() {
+  listFilters.occasion = '';
+  listFilters.budget = '';
+  listFilters.style = '';
 }
 
 let io;
@@ -261,6 +312,43 @@ onMounted(() => {
 
     <main v-else class="list-wrap">
       <button type="button" class="link-back" @click="step = 0">← 修改画像</button>
+      <div class="filter-bar card">
+        <div class="filter-row">
+          <label class="filter-label">场合</label>
+          <select v-model="listFilters.occasion" class="filter-select">
+            <option value="">全部</option>
+            <option value="birthday">生日</option>
+            <option value="anniversary">纪念日</option>
+            <option value="festival">节日</option>
+            <option value="thanks">感谢</option>
+            <option value="apology">道歉</option>
+            <option value="casual">无理由</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <label class="filter-label">预算</label>
+          <select v-model="listFilters.budget" class="filter-select">
+            <option value="">全部</option>
+            <option value="lt100">&lt;100</option>
+            <option value="100-300">100–300</option>
+            <option value="300-500">300–500</option>
+            <option value="500-1000">500–1000</option>
+            <option value="1000+">1000+</option>
+          </select>
+        </div>
+        <div class="filter-row">
+          <label class="filter-label">风格</label>
+          <select v-model="listFilters.style" class="filter-select">
+            <option value="">全部</option>
+            <option value="practical">实用</option>
+            <option value="ritual">仪式</option>
+            <option value="quirky">搞怪</option>
+            <option value="warm">温情</option>
+          </select>
+        </div>
+        <button type="button" class="btn-text" @click="clearListFilters">清空筛选</button>
+      </div>
+      <p v-if="!loading && products.length === 0" class="empty-hint">暂无商品，请清空筛选或修改画像。</p>
       <div class="grid">
         <div
           v-for="(p, idx) in products"
@@ -393,6 +481,44 @@ onMounted(() => {
   margin-bottom: 12px;
   cursor: pointer;
   font-size: 14px;
+}
+.filter-bar {
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.filter-label {
+  flex: 0 0 40px;
+  font-size: 12px;
+  color: #808080;
+}
+.filter-select {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.btn-text {
+  margin-top: 4px;
+  width: 100%;
+  border: none;
+  background: none;
+  color: #ff6b6b;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: right;
+}
+.empty-hint {
+  text-align: center;
+  color: #808080;
+  font-size: 14px;
+  padding: 16px;
 }
 .grid {
   display: grid;

@@ -1,0 +1,32 @@
+.list {
+  height: 100vh;
+}
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 8rpx;
+}
+.item {
+  width: calc(50% - 24rpx);
+  margin: 8rpx;
+  padding: 0;
+  overflow: hidden;
+}
+.img {
+  width: 100%;
+  height: 320rpx;
+}
+.title {
+  font-size: 24rpx;
+  padding: 8rpx 12rpx;
+}
+.price {
+  color: #ff6b6b;
+  font-weight: 600;
+  padding: 0 12rpx 12rpx;
+}
+.hint {
+  text-align: center;
+  padding: 40rpx;
+  color: #888;
+}
