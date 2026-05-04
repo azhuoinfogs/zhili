@@ -17,11 +17,13 @@ CREATE TABLE IF NOT EXISTS `user_profile` (
   `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '画像ID',
   `user_id` BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
   `name` VARCHAR(64) COMMENT '画像名称',
-  `relation` VARCHAR(32) COMMENT '关系: friend/partner/family/colleague/lover/parent/child/other',
+  `relation` VARCHAR(32) COMMENT '关系: friend/partner/family/colleague/elder/teacher/client/other',
   `gender` VARCHAR(16) COMMENT '性别: male/female/unknown',
-  `age_range` VARCHAR(16) COMMENT '年龄区间: under18/18-25/26-35/36-45/46plus',
+  `age_band` VARCHAR(16) NULL COMMENT '与 personalized ageBand 一致: under18/18-25/26-35/36-45/46plus',
   `budget` VARCHAR(16) COMMENT '预算档位: lt100/100-300/300-500/500-1000/1000+',
-  `circles` JSON COMMENT '兴趣圈层数组',
+  `occasion` VARCHAR(32) NULL COMMENT '与 personalized occasion 一致',
+  `style` VARCHAR(32) NULL COMMENT '与 personalized style 一致',
+  `interests` JSON NULL COMMENT '与 personalized interests 一致，最多 3 项',
   `taboos` JSON COMMENT '禁忌数组',
   `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否默认画像',
   `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -30,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `user_profile` (
   INDEX `idx_user_id` (`user_id`),
   INDEX `idx_is_default` (`is_default`),
   CONSTRAINT `fk_user_profile_user` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户画像表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户画像表（列与 scoring.js / personalized 对齐，策略 A）';
 
 CREATE TABLE IF NOT EXISTS `product` (
   `product_id` VARCHAR(32) NOT NULL COMMENT '商品ID',

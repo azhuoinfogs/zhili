@@ -89,7 +89,7 @@ icacls 'C:\ProgramData\DockerDesktop' /grant Administrators:F /t 2>$null
    `$env:PATH = 'C:\Program Files\Docker\Docker\resources\bin;' + $env:PATH`  
    （本仓库的 `npm run dev:db` 脚本在 Windows 上会尝试自动 prepend 该目录，但仍需 daemon 已运行。）
 3. `cd prototype\server` 执行 **`npm install`**（`npm run dev:db` 会调用其中的 `migrate`/`seed`）。
-4. `cd prototype` 执行 **`npm run dev:db`**。
+4. `cd prototype` 执行 **`npm run dev:db`**（内含 **`migrate`**：若库里 **`user_profile`** 仍为旧列 **`age_range`/`circles`**，会自动执行 **`server/migrations/002_user_profile_scoring_align.sql`** 对齐 **`personalized`/scoring**，见 develop2 §9.3）。
 5. `cd prototype\server` 执行 **`npm start`**，浏览器访问 `http://127.0.0.1:实际端口/api/health`，应看到 `database: "connected"`、`db_product_count: 200`（首次 seed 成功后）。
 
 ### 排错摘要

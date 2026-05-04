@@ -1,8 +1,8 @@
 # 知礼 · 整合开发计划（develop2）
 
-**版本**：v2.8  
-**更新**：2026-05-04（废止 `develop.md` / `develop1.md`，PRD 长表并入附录 A；全库链接对齐本文）  
-**状态**：待评审（仓库 **B0 + B1 + 本机 Docker** 与篇首快照、prototype-spec §3 一致）  
+**版本**：v2.9  
+**更新**：2026-05-04（**策略 A** 落地：`user_profile` 列与 `personalized`/scoring 对齐；`002` 迁移 + `migrate.js` 条件执行）  
+**状态**：待评审（仓库 **B0 + B1 + 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
 
@@ -15,12 +15,12 @@
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`（**`offset`/`limit`** 分页，默认 20、最大 50）、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；列表项含 **`images` 数组**。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（`Authorization: Bearer`）；`/api/health` 含 `auth_configured`、`jwt_strong_secret` |
+| **API** | **已具备；B2 未编码** | 验证流：`GET /api/hot`、`POST /api/personalized`（**`offset`/`limit`** 分页，默认 20、最大 50）、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；列表项含 **`images` 数组**。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（`Authorization: Bearer`）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`。**B2** 画像 REST 见 **§9.3** 与 [api.md](api.md) §8（**尚未挂载**） |
 | **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条** |
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
 | **阶段 A（H5）** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐（排期见附录 A §三） |
-| **MVP 后端（B0～）** | **B0 已具备；B1 登录已落地；B2+ 未开工** | **B0** 同前。**B1**（`prototype/server`）：`POST /api/user/login`（`code`→`jscode2session` 或 `WECHAT_MOCK`）、`user` upsert、**JWT**、`GET /api/user/me`（`Bearer` 鉴权）、登录限流、`/api/health` 增 `auth_configured` / `jwt_strong_secret`；代码见 `routes/user.js`、`lib/jwt.js`、`lib/wechat.js`、`middleware/requireAuth.js`。**B2+**：画像 CRUD、推荐网关、`/api/favorite*`、联盟转链等仍待开发 |
+| **MVP 后端（B0～）** | **B0+B1 已具备；B2 仅库表对齐** | **B0** 同前。**B1** 同前。**B2**：**`user_profile`** 已与 **`personalized`/scoring** 列对齐（**策略 A**：`001` 新表定义 + **`002`+`migrate.js`** 升级旧库）；**`/api/profile*` REST 仍未开工**。**B3+**：推荐网关、`/api/favorite*`、联盟转链等仍待开发 |
 | **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
@@ -142,7 +142,7 @@
 | develop1 表 | prototype 现状 | MVP 落库说明 |
 |---------------|------------------|--------------|
 | `user` | 匿名 `zhili_vid`（字符串） | 微信登录后写入 `openid`；可保留 `device_id`/`anon_id`  varchar 关联历史埋点 |
-| `user_profile` | 浏览器单次画像 JSON；**禁忌**在表单与 `personalized` body，develop1 表未单列 | 增加 `taboos` json 或 text[]，与 PRD / `scoring.js` 一致 |
+| `user_profile` | 浏览器单次画像 JSON；服务端表见 **`migrations/001`+`002`** | 列 **`age_band`、`interests` JSON、`occasion`、`style`、`taboos`** 与 **`POST /api/personalized` / `scoring.js`** 一致（**策略 A**，§9.3.1）；B2 REST 仍待开发 |
 | `product` | `products.json` 行 | `id`→`product_id`；`title`→`name`；**`styles` 数组**→develop1 单 `style` enum：取主风格或拆成 `styles` json 改表 |
 | `collection` | 无持久化 | 新表 + `POST/DELETE /api/favorite*`（见 §7） |
 | `event` | `events.jsonl` 多字段 JSON | `event_type` ← `event`；`extra` ← 其余字段 JSON；`user_id` 登录后 FK，未登录可写 0 + `extra.zhili_vid` |
@@ -153,7 +153,7 @@
 |---------------------|-----------------------------------|----------|
 | `relation` 中文 enum | `relation`: `friend` / `partner` / … | 小程序或 ETL **对照表**双向转换 |
 | `age_range` `<18` 与 `18-25` | `under18`、`18-25` | 行级映射；勿混用 |
-| `circles` json | `interests: string[]` | 键名统一为 `circles` 存库或保留 `interests` 与文档约定 |
+| `circles` json（历史 develop1） | `interests: string[]` | **`user_profile` 库列名为 `interests`**（新装 001；旧库由 **002** 自 `circles` 重命名） |
 | `budget_max` decimal | `budget`: `100-300` 等档位 | 二选一：**档位列**（与现算法一致）或 **max 元** + 网关换算入 `personalized` |
 | `gender` 男/女/通用 | `male` / `female` / `unknown` | 对照表 |
 | `product.style` 单枚举 | `styles[]` | 入库时写主风格；或改 product 为 `styles` json（推荐与 PRD 4.2 一致） |
@@ -217,19 +217,19 @@
 
 以下按 **可并行边界** 与 **依赖顺序** 拆项；人天仍汇总为下表 **14**（若 **`scoring.js` 整包复用** 且不做 Nest 内重写，可将「推荐打分」人天挪到联调/网关映射）。
 
-| 序号  | 任务包              | 内容要点                                                                                                                                                                                                       | 依赖           | 交付物                     |
-| --- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------- |
-| B0  | **工程与数据基座**      | Nest（或沿用 **Express 单体**，**当前仓库为后者**）；MySQL 连接池；迁移脚本；**§6 建表**（`user` / `user_profile` 含 `taboos` / `product` / `collection` / `event`）；**`products.json` → `product` 初始化**（字段对照 §6.3）；本地/测试 Redis（**`prototype/docker-compose.yml` + `npm run dev:db`**） | —            | 可执行迁移、种子数据、健康检查；**交付物路径**：`server/migrations/`、`server/migrate.js`、`server/seed.js`、`server/db.js`、`prototype/README.md`（Docker）、`prototype/scripts/docker-dev-up.mjs`         |
-| B1  | **微信登录**         | `POST /api/user/login`：`code`2Session → `openid` 落 `user`；JWT 或 session；与小程序 `app.login` 约定                                                                                                                | B0           | **已实现（Express）**：`POST /api/user/login`、`GET /api/user/me`、`lib/jwt.js`、`middleware/requireAuth.js`；详见 [prototype/README.md](prototype/README.md)「B1」            |
-| B2  | **画像 CRUD**      | `POST/GET/PUT` develop1 §5 画像系列；Body **英文键与 `personalized` 一致**（§7.2）；**中英文 enum 对照**在写入/读出层统一（§6.2）                                                                                                       | B1           | Swagger/契约 + 单测         |
-| B3  | **推荐内核对接**       | **不重写公式**：移植或子进程/同仓引用 **`computeScore` / `buildReasonLines`**（§8）；内部仍调 **`GET /api/hot`** / **`POST /api/personalized`**（offset/limit）；或把现 Express 路由打成子应用挂载                                               | B0、B2（需默认画像） | 与验证端一致的分页与列表字段          |
-| B4  | **推荐网关 + Redis** | `GET /api/recommend`：`page`/`size` → **offset/limit**（§7.2）；**§8.3** 缓存 key、TTL、画像变更失效、故障降级热门                                                                                                              | B3、B0（Redis） | P90 目标可测                |
-| B5  | **商品读模型**        | `GET /api/product/:id`；可选代理 **`/api/related/:id`**；与小程序详情协议对齐                                                                                                                                              | B0           | 详情 JSON 含 `images`、理由字段 |
-| B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                 | B1           | 收藏幂等与列表分页               |
-| B7  | **埋点入库（可选）**     | `POST /api/event` 写 `event`；或与验证端 **`POST /api/collect` 双写**、网关转发；匿名 `zhili_vid` 进 `extra`（§6.1）                                                                                                           | B0、B1（可选）    | 与 CSV/分析脚本字段可对齐         |
-| B8  | **联盟转链**         | `GET /api/purchase/url`；`product` 联盟字段；超时重试≤2、结果缓存（§13）                                                                                                                                                    | B0           | 可跳转真实/沙箱链接              |
-| B9  | **商品写接口（极简后台）**  | develop1 后台依赖的 **商品 CRUD API**；权限与运营账号（可与 B1 分角色）                                                                                                                                                          | B0、B1        | 后台可录入/改价签               |
-| B10 | **联调与硬化**        | 与小程序端对 **鉴权头、错误码、分页、空列表**；压测推荐 P90；Redis 降级演练                                                                                                                                                              | B1～B9 主链     | 联调清单关闭、§11.2 后端相关项达标    |
+| 序号  | 任务包              | 内容要点                                                                                                                                                                                                                                                     | 依赖           | 交付物                                                                                                                                                                    |
+| --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| B0  | **工程与数据基座**      | Nest（或沿用 **Express 单体**，**当前仓库为后者**）；MySQL 连接池；迁移脚本；**§6 建表**（`user` / `user_profile` 含 `taboos` / `product` / `collection` / `event`）；**`products.json` → `product` 初始化**（字段对照 §6.3）；本地/测试 Redis（**`prototype/docker-compose.yml` + `npm run dev:db`**） | —            | 可执行迁移、种子数据、健康检查；**交付物路径**：`server/migrations/`、`server/migrate.js`、`server/seed.js`、`server/db.js`、`prototype/README.md`（Docker）、`prototype/scripts/docker-dev-up.mjs` |
+| B1  | **微信登录**         | `POST /api/user/login`：`code`2Session → `openid` 落 `user`；JWT 或 session；与小程序 `app.login` 约定                                                                                                                                                              | B0           | **已实现（Express）**：`POST /api/user/login`、`GET /api/user/me`、`lib/jwt.js`、`middleware/requireAuth.js`；详见 [prototype/README.md](prototype/README.md)「B1」                  |
+| B2  | **画像 CRUD**      | 持久化 **`user_profile`**；REST **与 `POST /api/personalized` 画像段英文键一致**（§7.2、§9.3）；鉴权 **`requireAuth`**；默认画像与列表分页；详见 **§9.3**                                                                                                                                | B1           | 迁移（补列若有）+ `routes/profile*.js` + 契约 + 单测                                                                                                                               |
+| B3  | **推荐内核对接**       | **不重写公式**：移植或子进程/同仓引用 **`computeScore` / `buildReasonLines`**（§8）；内部仍调 **`GET /api/hot`** / **`POST /api/personalized`**（offset/limit）；或把现 Express 路由打成子应用挂载                                                                                             | B0、B2（需默认画像） | 与验证端一致的分页与列表字段                                                                                                                                                         |
+| B4  | **推荐网关 + Redis** | `GET /api/recommend`：`page`/`size` → **offset/limit**（§7.2）；**§8.3** 缓存 key、TTL、画像变更失效、故障降级热门                                                                                                                                                            | B3、B0（Redis） | P90 目标可测                                                                                                                                                               |
+| B5  | **商品读模型**        | `GET /api/product/:id`；可选代理 **`/api/related/:id`**；与小程序详情协议对齐                                                                                                                                                                                            | B0           | 详情 JSON 含 `images`、理由字段                                                                                                                                                |
+| B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                               | B1           | 收藏幂等与列表分页                                                                                                                                                              |
+| B7  | **埋点入库（可选）**     | `POST /api/event` 写 `event`；或与验证端 **`POST /api/collect` 双写**、网关转发；匿名 `zhili_vid` 进 `extra`（§6.1）                                                                                                                                                         | B0、B1（可选）    | 与 CSV/分析脚本字段可对齐                                                                                                                                                        |
+| B8  | **联盟转链**         | `GET /api/purchase/url`；`product` 联盟字段；超时重试≤2、结果缓存（§13）                                                                                                                                                                                                  | B0           | 可跳转真实/沙箱链接                                                                                                                                                             |
+| B9  | **商品写接口（极简后台）**  | develop1 后台依赖的 **商品 CRUD API**；权限与运营账号（可与 B1 分角色）                                                                                                                                                                                                        | B0、B1        | 后台可录入/改价签                                                                                                                                                              |
+| B10 | **联调与硬化**        | 与小程序端对 **鉴权头、错误码、分页、空列表**；压测推荐 P90；Redis 降级演练                                                                                                                                                                                                            | B1～B9 主链     | 联调清单关闭、§11.2 后端相关项达标                                                                                                                                                   |
 
 ### 9.2 B1 微信登录（细化 WBS）
 
@@ -245,6 +245,54 @@
 | **B1.6** | **限流与防滥用** | 对 **`/api/user/login`** 按 **IP + code 指纹** 简单限流（如内存计数或 Redis 计数），防止刷 code、刷 token。验收：压测或脚本连续请求触发 **429** 或统一错误码。 | B1.2（Redis 可选 B0） |
 | **B1.7** | **小程序联调约定** | 与 **`prototype/mp-weixin`**（或正式小程序仓库）对齐：**`wx.login` → `code` → POST 本接口 → 存 `token`**；后续请求带 **Header**。文档：**请求/响应示例、错误码表、HTTPS 仅生产强制**。验收：开发版真机或开发者工具走通 **登录 → 带 token 调任意占位受保护接口**。 | B1.4～B1.5 |
 | **B1.8** | **测试与可观测** | **单元测试**：mock `jscode2session` HTTP，覆盖成功 / 无效 code / 微信侧 5xx。**集成测试**（可选）：测试号 + 真 `code`。`/api/health` 可增加 **`auth_configured`**（布尔，不泄露 secret）。验收：`npm test` 或 CI 绿灯。 | B1.2～B1.5 |
+
+### 9.3 B2 画像 CRUD（细化 WBS）
+
+> **人天参照**：develop2 人天表「画像 CRUD API」约 **2 人日**；下表按 **0.25～0.5 人日** 粒度拆，便于并行（**契约与迁移** ∥ **路由实现**）与验收。
+
+#### 9.3.1 现状与缺口（实施前必读）
+
+| 项 | 说明 |
+|----|------|
+| **表与列（策略 A 已选）** | **新装**：`001_b0_schema.sql` 中 **`user_profile`** 已含 **`age_band`、`interests` JSON、`occasion`、`style`**，与 **`personalized` / `scoring.js`** 语义一致。**旧库**：`npm run migrate` 在检测到仍存在 **`age_range`** 时自动执行 **`002_user_profile_scoring_align.sql`**（`age_range`→`age_band`、`circles`→`interests`，并 **`ADD occasion`、`style`**）。实现见 **`prototype/server/migrate.js`**。 |
+| **B2 路由** | **`/api/profile*`** 仍为 **§9.3.2～9.3.3** 待开发；落库读写可直接用 **与 API 相同的英文键名**（无需 `toRow` 重命名映射，仅需 JSON 序列化/校验）。 |
+| **鉴权** | 所有画像写读必须 **`Authorization: Bearer`** + **`requireAuth`**，`user_id` **仅来自 JWT `sub`**，**禁止**信任 Body 里的 `user_id` |
+
+#### 9.3.2 子任务与验收
+
+| 子项        | 任务                                          | 要点与验收                                                                                                                                                                                                                                                                                                         | 依赖        |
+| --------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **B2.1**  | **契约冻结**                                    | 在 **`api.md`**（或 OpenAPI 片段）写明：**请求/响应 JSON 与 `POST /api/personalized` 画像段一致**——字段：`relation`、`ageBand`、`interests`（数组 ≤3）、`occasion`、`budget`、`gender`、`style`、`taboos`（数组）；可选 `name`（展示名，映射库 `user_profile.name`）。**枚举合法值**与 `prototype/client` 表单、`scoring.js` 常量一致（§6.2）。验收：评审签字或 PR 内联表格无 open question。 | B1        |
+| **B2.2**  | **迁移 / 映射落地**                               | **策略 A 已完成**：`migrations/002_user_profile_scoring_align.sql` + `migrate.js` 条件执行。**待办**：B2 路由层 **JSON 校验与 `interests`≤3** 单测。验收：旧库跑一次 `npm run migrate` 后 **`information_schema`** 无 `age_range`/`circles`，有 **`age_band`/`interests`/`occasion`/`style`**。                                                                                                                        | B2.1、B0   |
+| **B2.3**  | **`POST /api/profile` 创建**                  | Body 为完整画像 JSON + 可选 `name`、`is_default`。校验：必填 **relation、ageBand、occasion、budget**（与 PRD/H5 一致可调）；**interests.length ≤ 3**；非法 enum → **400** + `error` 码表。插入 **`user_id = req.userId`**。若 **`is_default: true`**：同事务内将该用户其他行 **`is_default=0`**（**唯一默认**）。验收：同一用户多条画像 + 仅一条 `is_default=1`。                  | B2.2、B1.5 |
+| **B2.4**  | **`GET /api/profile` 列表**                   | Query：`page`+`size` 或 **`offset`/`limit`**（与 §7.2 网关约定一致，**默认与上限**建议同商品接口 20/50）。仅返回 **`user_id = req.userId`**。响应为 **`{ list, total }`** 或纯数组（**团队选一种写死**）。验收：空列表 **200 + []**；越权访问他人 ID **不可达**（无 user_id 参数）。                                                                                              | B2.3      |
+| **B2.5**  | **`GET /api/profile/:id` 详情**               | `:id` 为画像主键；**404** 若不存在或 `user_id` 不匹配。返回体可直接用于小程序表单回显。验收：篡改 URL 访问他人 `profile_id` → **404** 或 **403**（二选一统一）。                                                                                                                                                                                               | B2.3      |
+| **B2.6**  | **`PUT /api/profile/:id` 更新**               | 语义：**全量替换**或 **PATCH 部分字段**（二选一写文档）；校验同创建。更新默认画像时同样 **清零其他 `is_default`**。验收：并发双默认请求后 DB 仍仅一条默认。                                                                                                                                                                                                              | B2.5      |
+| **B2.7**  | **`DELETE /api/profile/:id`（可选）**           | 若 PRD 要求「多画像管理」：删除非默认；**禁止删除最后一条**或删前强制改默认（**产品规则写死**）。若 MVP 砍删除：本项标 **Out of scope** 并在 `api.md` 标注。                                                                                                                                                                                                         | B2.5      |
+| **B2.8**  | **`PUT /api/profile/:id/default`（或 PATCH）** | 仅将指定画像设为默认，**幂等**；副作用：其余 `is_default=0`。验收：重复调用状态不变。                                                                                                                                                                                                                                                          | B2.5      |
+| **B2.9**  | **与推荐链路的接口**                                | **B3 依赖**：提供 **`GET /api/profile/default`** 或列表中明确默认项，供网关取 **默认 `profile_id` + 画像 JSON** 调内部 `personalized`。验收：无默认画像时 **404 + 明确错误码**（提示先创建），避免 B3 静默错推。                                                                                                                                                      | B2.4～B2.8 |
+| **B2.10** | **限流与大小**                                   | 对 **`POST/PUT`** 做轻量限流（同 B1 内存桶或 Redis），Body 上限与 **`express.json`** 一致；防止超大 `taboos`/`interests`。验收：超限 **413** 或 **400**。                                                                                                                                                                                     | B2.3      |
+| **B2.11** | **测试**                                      | **单元**：校验器 + `toRow`/`fromRow`。**集成**：登录 → 建 2 画像 → 列 → 改默认 → 更新 → 读详情。验收：`npm test` 新增 `profile.test.mjs`（或等价）绿灯。                                                                                                                                                                                            | B2.3～B2.9 |
+| **B2.12** | **文档同步**                                    | 实现后更新 **`api.md`** §2 已实现表与 Postman；**`prototype-spec.md`** §3 增正式路由行；本文篇首「当前开发状态」**API** 行去掉「B2 未编码」。验收：PR 内链接无死链。                                                                                                                                                                                           | B2.11     |
+
+#### 9.3.3 建议路由一览（Express 挂载示例）
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/profile` | 创建 |
+| `GET` | `/api/profile` | 列表（分页） |
+| `GET` | `/api/profile/default` | 当前用户默认画像（供 B3） |
+| `GET` | `/api/profile/:id` | 详情 |
+| `PUT` | `/api/profile/:id` | 更新 |
+| `DELETE` | `/api/profile/:id` | 可选删除 |
+| `PUT` | `/api/profile/:id/default` | 设为默认（可与 PATCH 合并设计） |
+
+> **路径前缀**：可与现有 **`/api/user`** 并列挂载 **`/api/profile`**（`index.js`：`app.use('/api/profile', profileRouter)`），**均需 `requireAuth`**。
+
+#### 9.3.4 与 B3/B4 的交接面
+
+- **B3**：读默认画像（或用户当前选中的 `profile_id`）→ 组装与 **`POST /api/personalized`** 相同的 **profile 对象** → 不调微信、不改分数字段名。  
+- **B4**：缓存失效 key 含 **`profile_id` 或 profile 内容 hash`**；**B2.6/B2.8 成功后** 必须 **`DEL`** 该用户相关 `recommend:*`（与 §8.3 一致）。
 
 **与 develop1 表差异（本迭代可裁）**：develop1 `user` 含 `nickname` / `avatar_url`；当前 B0 表 **无** 此二列。B1 **最小闭环**可不落昵称头像；若产品要求「登录即写昵称」，则单加 **`002_user_profile_social.sql`** 或在 `user` 上 **`ALTER TABLE` 增列** 后再在登录或 **`getUserProfile`** 回调里更新（可划到 **B1.9 小迭代** 或 **B2 前**）。
 

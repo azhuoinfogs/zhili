@@ -37,6 +37,8 @@
 | `POST` | `/api/collect` | 埋点上报 |
 | `GET` | `/api/export/events.csv` | 导出埋点 CSV |
 
+**规划中（B2）**：服务端 **`/api/profile*`** 尚未实现；契约与路由草案见 **§8** 与 [develop2.md](develop2.md) **§9.3**。当前 H5 仍以 **`localStorage.zhili_profile`** 直传 `personalized`。
+
 ---
 
 ## 3. `GET /api/health`
@@ -227,11 +229,28 @@
 
 ## 8. 规划中接口（未在验证端实现）
 
-与 develop2 **§7.2、§9.1** 对齐，供网关 / MVP 排期引用：
+与 develop2 **§7.2、§9.1、§9.3** 对齐，供网关 / MVP 排期引用。
+
+### 8.1 B2 画像 CRUD（契约草案，**未编码**）
+
+**鉴权**：以下路径均需 **`Authorization: Bearer`**（与 `GET /api/user/me` 相同）。**`user_id` 仅来自 JWT**，不得信任 Body 中的用户 id。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/profile` | 创建画像；Body 与 **`POST /api/personalized` 画像段** 同形（`relation`、`ageBand`、`interests`≤3、`occasion`、`budget`、`gender`、`style`、`taboos`）+ 可选 `name`、`is_default` |
+| `GET` | `/api/profile` | 当前用户画像列表；分页 **`offset`/`limit`** 或与 develop2 约定之 `page`/`size` |
+| `GET` | `/api/profile/default` | 默认画像一条，供 **B3** 网关组装 `personalized` |
+| `GET` | `/api/profile/:id` | 详情；**404/403** 若不属于当前用户 |
+| `PUT` | `/api/profile/:id` | 全量或部分更新（以最终实现文档为准） |
+| `DELETE` | `/api/profile/:id` | **可选**；删除规则见 develop2 §9.3 |
+| `PUT` | `/api/profile/:id/default` | 设为默认画像（幂等）；副作用：同用户其余 `is_default` 清零 |
+
+**库表与字段映射**：**策略 A 已选**——`user_profile` 列 **`age_band`、`interests`（JSON）、`occasion`、`style`、`taboos`** 与 **`personalized` / `scoring.js`** 一致；见 **`migrations/001_b0_schema.sql`**（新装）与 **`migrations/002_user_profile_scoring_align.sql`**（旧库升级，由 **`migrate.js`** 检测 `age_range` 后执行）。说明见 **develop2 §9.3.1**。
+
+### 8.2 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
-| `POST/GET/PUT` 画像系列 | **B2**；Body 英文键与 **`personalized` 画像** 一致 |
 | `GET /api/recommend` | **B4**；`page`/`size` → `offset`/`limit`，内调 hot/personalized |
 | `GET /api/product/:id` | **B5** |
 | `POST/DELETE /api/favorite`、`GET /api/favorite/list` | **B6** |
@@ -250,6 +269,9 @@
 | `prototype/server/middleware/requireAuth.js` | Bearer JWT |
 | `prototype/server/lib/jwt.js` / `lib/wechat.js` | JWT 与微信 / mock |
 | `prototype/server/scoring.js` | 打分与理由 |
+| `prototype/server/migrations/001_b0_schema.sql` | 含 **`user_profile`**（列与 scoring 对齐） |
+| `prototype/server/migrations/002_user_profile_scoring_align.sql` | 旧库 **`age_range`→`age_band`** 等（策略 A） |
+| （规划）`prototype/server/routes/profile.js` | B2 画像 CRUD，见 develop2 §9.3 |
 
 ---
 
@@ -354,4 +376,4 @@ if (pm.response.code === 200) {
 
 ---
 
-**文档版本**：与 develop2 **v2.8** 快照一致（B0+B1 已具备，B2+ 未开工；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v2.9** 快照一致（B0+B1 已具备；**B2** 库表策略 A 已落地，**`/api/profile*`** 契约见 §8.1 未编码；`develop.md` / `develop1.md` 已废止）。

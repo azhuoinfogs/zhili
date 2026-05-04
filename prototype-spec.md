@@ -2,7 +2,7 @@
 
 本文档与 [`plan0.md`](plan0.md)（验证流程）、[`prd_v0.md`](prd_v0.md)（产品需求）对齐，描述本仓库 **`prototype/`** 目录下的可运行实现。PRD 中小程序正式稿的视觉以 **PRD §5.2**（浅色、主色 `#FF6B6B` 等）为准；本 H5 验证端为便于传播与 A/B 实验，采用 **深色「礼遇艺廊」主题**（参考 UI/UX Pro Max 奢侈品电商方向），字段与接口与 PRD 一致。
 
-**与仓库同步（快照）**：2026-05-04 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：200**；列表支持 **下拉刷新、触底分页**；详情 **多图 + 类似推荐** 见 API。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（JWT）；详见 **`server/.env.example`** 与 [prototype/README.md](prototype/README.md)「B1」。整体排期与 PRD 分项见 **[develop2.md](develop2.md)**（篇首「当前开发状态」+ **附录 A**）。
+**与仓库同步（快照）**：2026-05-04 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：200**；列表支持 **下拉刷新、触底分页**；详情 **多图 + 类似推荐** 见 API。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（JWT）；详见 **`server/.env.example`** 与 [prototype/README.md](prototype/README.md)「B1」。**B2 进度**：**`user_profile` 表**已与 **`personalized`/scoring** 列对齐（**策略 A**，`migrations/001`+`002`，`npm run migrate` 自动升级旧库）。**`/api/profile*`** REST 规格见 **[develop2.md](develop2.md) §9.3** 与 **[api.md](../api.md) §8.1**，**尚未在 §3 表实现**。整体排期与 PRD 分项见 **[develop2.md](develop2.md)**（篇首「当前开发状态」+ **附录 A**）。
 
 ---
 
@@ -44,6 +44,8 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 | `GET` | `/api/related/:id` | 类似推荐；Query：可选 **`profile`**（JSON 字符串，与 `personalized` 画像一致时理由更准） |
 | `POST` | `/api/collect` | 埋点上报（JSON 单行事件） |
 | `GET` | `/api/export/events.csv` | 导出事件 |
+
+**规划中（B2）**：`POST`/`GET`/`PUT` **`/api/profile`** 等路由见 [develop2.md](../develop2.md) **§9.3**、[api.md](../api.md) **§8.1**；上线前 H5 画像仍以 **`localStorage.zhili_profile`** 提交 **`/api/personalized`**。
 
 打分与理由模板见 PRD **§4.3 / §4.4**，实现见 `prototype/server/scoring.js`。列表/详情商品对象含 **`image`**（首图）与 **`images`**（多图 URL 数组，至少 3 张由服务端生成）。
 
