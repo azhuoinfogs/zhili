@@ -67,6 +67,7 @@
 | **B6 收藏业务**    | ✅ 已完成          | `routes/favorite.js`、`lib/favoriteHelpers.js`                       |
 | **B7 埋点入库**    | ✅ 已完成          | `routes/event.js`、`lib/eventDualWrite.js`                           |
 | **B9 运营后台**    | ✅ 已完成          | `routes/admin*.js`、`prototype/admin/`                               |
+| **B10 联调硬化**   | ✅ 已完成          | `middleware/errorHandler.js`、`lib/validator.js`、`index.js`（降级逻辑） |
 
 #### **🌐 Client H5 验证端** (`prototype/client/`)
 
@@ -90,10 +91,9 @@
 
 ### 1.3 待完成任务（按模块分类）
 
-| 模块                | 任务       | 优先级 | 预估人天 | 依赖    |
-| ----------------- | -------- | --- | ---- | ----- |
-| **Server**        | B8 联盟转链  | 高   | 2    | B0、B9 |
-| **Server+Weixin** | B10 联调硬化 | 高   | 2    | B1-B9 |
+| 模块     | 任务      | 优先级 | 预估人天 | 依赖    |
+| -------- | -------- | --- | ---- | ----- |
+| **Server** | B8 联盟转链 | 高   | 2    | B0、B9 |
 
 ---
 
