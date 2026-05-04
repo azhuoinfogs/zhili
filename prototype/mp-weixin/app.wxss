@@ -1,18 +1,55 @@
+/**
+ * 与 prototype/client/src/style.css + App.vue 深色「礼遇艺廊」一致
+ * 色板：--lx-bg / --lx-surface / --lx-gold / --lx-text 等
+ */
 page {
-  background: #f8f8f8;
-  color: #1a1a1a;
+  --lx-bg: #0c0a09;
+  --lx-surface: #1c1917;
+  --lx-elevated: #292524;
+  --lx-gold: #ca8a04;
+  --lx-gold-bright: #eab308;
+  --lx-text: #fafaf9;
+  --lx-title: #e7e5e4;
+  --lx-muted: #a8a29e;
+  --lx-dim: #78716c;
+  --lx-foot: #57534e;
+  --lx-border: rgba(255, 255, 255, 0.08);
+  --lx-glass: rgba(28, 25, 23, 0.55);
+
+  background-color: var(--lx-bg);
+  color: var(--lx-text);
   font-size: 28rpx;
+  font-family:
+    'PingFang SC',
+    'Microsoft YaHei',
+    -apple-system,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* 玻璃卡片（对齐 client .glass + .product-card） */
 .card {
-  background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  background: var(--lx-glass);
+  border: 1rpx solid var(--lx-border);
+  border-radius: 4rpx;
+  padding: 32rpx;
   margin: 24rpx;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  box-shadow: 0 16rpx 64rpx rgba(0, 0, 0, 0.35);
 }
+
+/* 主按钮：对齐 client .cta-explore / .btn-outline 金色描边 */
 .btn-primary {
-  background: #ff6b6b;
-  color: #fff;
-  border-radius: 32rpx;
-  margin: 32rpx 24rpx;
+  margin: 48rpx 32rpx 32rpx;
+  padding: 28rpx 40rpx;
+  background: transparent !important;
+  color: var(--lx-text) !important;
+  border: 2rpx solid var(--lx-gold) !important;
+  border-radius: 0;
+  font-size: 24rpx;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+}
+
+button.btn-primary::after {
+  border: none;
 }

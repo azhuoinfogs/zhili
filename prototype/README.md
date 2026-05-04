@@ -375,4 +375,4 @@ npm run gen:products
 
 ## 微信小程序骨架（v1 预览）
 
-见 [`mp-weixin/README.md`](mp-weixin/README.md)（含与 **`prototype-spec.md`**、PRD §5.2 的对照说明），与 H5 共用同一套 API 契约。
+见 [`mp-weixin/README.md`](mp-weixin/README.md)（**「小程序开发步骤（明确版）」**：**阶段一** 按序 1–12 步跑通模拟器；常见失败、真机、PRD 扩展顺序；并与 **`prototype-spec.md`**、PRD §5.2 对照），与 H5 共用同一套 API 契约。

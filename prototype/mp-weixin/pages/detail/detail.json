@@ -1,1 +1,6 @@
-{ "navigationBarTitleText": "礼物详情" }
+{
+  "navigationBarTitleText": "礼物详情",
+  "navigationBarBackgroundColor": "#1c1917",
+  "navigationBarTextStyle": "white",
+  "backgroundColor": "#0c0a09"
+}

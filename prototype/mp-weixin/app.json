@@ -5,9 +5,9 @@
     "pages/detail/detail"
   ],
   "window": {
-    "navigationBarBackgroundColor": "#FF6B6B",
+    "navigationBarBackgroundColor": "#1c1917",
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "知礼",
-    "backgroundColor": "#F8F8F8"
+    "backgroundColor": "#0c0a09"
   }
 }
