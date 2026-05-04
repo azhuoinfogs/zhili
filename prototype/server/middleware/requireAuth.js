@@ -19,6 +19,7 @@ export function requireAuth(req, res, next) {
     }
     req.userId = id;
     req.openid = payload.openid || null;
+    req.authPayload = payload;
     next();
   } catch {
     res.status(401).json({ error: 'UNAUTHORIZED', message: '令牌无效或已过期' });

@@ -7,6 +7,7 @@ import { verifyUserToken } from '../lib/jwt.js';
 export function optionalAuth(req, res, next) {
   req.userId = null;
   req.openid = null;
+  req.authPayload = null;
   const raw = req.headers.authorization || '';
   const m = /^Bearer\s+(\S+)$/i.exec(raw);
   if (!m) {
@@ -22,6 +23,7 @@ export function optionalAuth(req, res, next) {
     }
     req.userId = id;
     req.openid = payload.openid || null;
+    req.authPayload = payload;
     next();
   } catch {
     res.status(401).json({ error: 'UNAUTHORIZED', message: '令牌无效或已过期' });

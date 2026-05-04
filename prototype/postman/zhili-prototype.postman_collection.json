@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "c4f8a1b2-3d5e-6f70-8a9b-0c1d2e3f4a5b",
-    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+B6+B7+验证流）",
-    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B6 收藏需 **MySQL + seed**。B7：`POST /api/event` 需 MySQL；可选 Bearer；`EVENT_DB_DUAL_WRITE=1` 时 `POST /api/collect` 会双写 `event`。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4/B6 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
+    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+B6+B7+B9+验证流）",
+    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B6 收藏需 **MySQL + seed**。B7：`POST /api/event` 需 MySQL；可选 Bearer；`EVENT_DB_DUAL_WRITE=1` 时 `POST /api/collect` 会双写 `event`。B9：`/api/admin/products*` 需 Bearer；服务端配置 **`ZHILI_ADMIN_USER_IDS`**（与 `/api/user/me` 的 `user.id` 一致）或 **`ZHILI_DEV_ADMIN_ANY_USER=1`**（仅本地）。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4/B6 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -290,6 +290,80 @@
         "url": "{{base_url}}/api/export/events.csv",
         "description": "需先至少成功一次 collect 以生成 events.csv。"
       }
+    },
+    {
+      "name": "B9 /api/admin/products",
+      "description": "需先 Login。server `.env`：`ZHILI_ADMIN_USER_IDS=<你的 user.id>` 或 `ZHILI_DEV_ADMIN_ANY_USER=1`（仅本地）。",
+      "item": [
+        {
+          "name": "GET /api/admin/products (list)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/products?limit=10&offset=0"
+          }
+        },
+        {
+          "name": "GET /api/admin/products/p001",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": "{{base_url}}/api/admin/products/p001"
+          }
+        },
+        {
+          "name": "POST /api/admin/products",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"z9_postman_1\",\n  \"title\": \"Postman 测试商品\",\n  \"price\": 9.99,\n  \"gender\": \"any\",\n  \"images\": [\"https://picsum.photos/seed/z9post/400/400\"],\n  \"styles\": [\"practical\"],\n  \"occasions\": [\"birthday\", \"universal\"],\n  \"interests\": [\"tech\"],\n  \"hotRank\": 900\n}"
+            },
+            "url": "{{base_url}}/api/admin/products"
+          }
+        },
+        {
+          "name": "PUT /api/admin/products/z9_postman_1",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman 测试商品（已改）\",\n  \"affiliateUrl\": \"https://example.com/aff/z9\"\n}"
+            },
+            "url": "{{base_url}}/api/admin/products/z9_postman_1"
+          }
+        },
+        {
+          "name": "DELETE /api/admin/products/z9_postman_1",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": "{{base_url}}/api/admin/products/z9_postman_1"
+          }
+        }
+      ]
     }
   ]
 }

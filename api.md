@@ -50,6 +50,11 @@
 | `POST` | `/api/favorite` | **B6** 添加收藏；Body **`productId`**（或 **`product_id`**）；Bearer |
 | `DELETE` | `/api/favorite/:productId` | **B6** 取消收藏；成功 **204** 无 body；Bearer |
 | `GET` | `/api/favorite/list` | **B6** 收藏列表；Query **`offset`/`limit`**（同 B2，默认 20、最大 50）；Bearer |
+| `GET` | `/api/admin/products` | **B9**：商品列表；Query **`offset`/`limit`**；**运营鉴权**（见 **§4.2.6**）；Bearer |
+| `GET` | `/api/admin/products/:productId` | **B9**：单条商品；Bearer |
+| `POST` | `/api/admin/products` | **B9**：新建 **`product`**；Bearer |
+| `PUT` | `/api/admin/products/:productId` | **B9**：部分更新；写后清详情缓存；Bearer |
+| `DELETE` | `/api/admin/products/:productId` | **B9**：物理删；写后清详情缓存；Bearer |
 
 > H5 仍可用 **`localStorage.zhili_profile`** 直传 **`/api/personalized`**；与 **`/api/profile`** 服务端持久化可并行存在。
 
@@ -316,6 +321,55 @@
 
 实现：**`routes/event.js`**；**`lib/eventPayload.js`**、**`lib/eventDb.js`**、**`lib/eventDualWrite.js`**。
 
+### 4.2.6 `/api/admin/products*`（B9 · 商品写）
+
+**前缀**：**`/api/admin/products`**（`Router` 挂载于 `app.use('/api/admin/products', …)`）。
+
+**鉴权**：全部 **`Authorization: Bearer`** + **运营**（满足其一即可）：
+
+| 方式 | 说明 |
+|------|------|
+| **`ZHILI_ADMIN_USER_IDS`** | 逗号分隔 **`user.id`**（数字），与 **`GET /api/user/me`** 的 `user.id` 一致 |
+| **JWT `role: admin`** | 签发示例：`signUserToken(userId, openid, { role: 'admin' })`（登录接口默认不带 `role`，需自建 token 或后续扩展登录） |
+| **仅本地** **`ZHILI_DEV_ADMIN_ANY_USER=1`** | 任意登录用户可写；**禁止上生产**；启动时会 **warn** |
+
+非运营：**403** `FORBIDDEN`。无 DB：**503** `DB_UNAVAILABLE`。
+
+**`product_id` 白名单**：与 B5/B6 一致 **`^[a-zA-Z0-9_-]{1,32}$`**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/admin/products` | 列表；Query **`limit`**（1～50，默认 20）、**`offset`**（≥0）；**`{ list, total }`**；排序 `hot_rank ASC, product_id ASC` |
+| `GET` | `/api/admin/products/:productId` | 单条 **`{ product }`**；无行 **404** `NOT_FOUND` |
+| `POST` | `/api/admin/products` | **201** **`{ product }`**；**409** `CONFLICT`（`product_id` 重复） |
+| `PUT` | `/api/admin/products/:productId` | **JSON 部分更新（PATCH 语义）**：仅出现的字段覆盖；**不可改路径 `product_id`**；成功 **200**；**`invalidateProductDetailById`** |
+| `DELETE` | `/api/admin/products/:productId` | **物理删**（`collection` 外键 **CASCADE**）；成功 **204** 无 Body；**`invalidateProductDetailById`** |
+
+**列表/单条 `product` 对象**（camelCase，与 `products.json` 项对齐）：`productId`、`title`、`price`、`sellPoint`、`occasionKeyword`、`images`、`styles`、`occasions`、`interests`、`gender`（**`male`/`female`/`any`/`unknown`**，与打分侧 **`any`** 一致）、`ageBands`、`taboosAvoid`、`hotRank`、`affiliateUrl`（可 `null`）、`clickCount`、`createdAt`、`updatedAt`（ISO8601）。
+
+**`POST` Body**（JSON）：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `id` 或 `productId` | 是 | 新商品主键，白名单同上 |
+| `title` | 是 | 对应 DB `name`，≤255 |
+| `price` | 是 | 非负数，上限 `1e9` |
+| `gender` | 否 | 默认 **`any`**（存库为 **`unknown`**，与 seed 一致） |
+| `sellPoint`、`occasionKeyword` | 否 | 默认空串 |
+| `images` | 否 | 字符串数组，≤**6** 项 |
+| `styles`、`occasions`、`interests`、`ageBands`、`taboosAvoid` | 否 | 各 ≤**24** 项 |
+| `hotRank` | 否 | 默认 **999** |
+| `clickCount` | 否 | 默认 **0** |
+| `affiliateUrl` | 否 | ≤512；空则 `null` |
+
+**`PUT` Body**：上表字段均可选（至少传一项）；合并后校验同 **`POST`**（全量约束）。
+
+**错误码摘要**：`400` `BAD_REQUEST` / `INVALID_ENUM`；`403` `FORBIDDEN`；`404` `NOT_FOUND`；`409` `CONFLICT`；`503` `DB_UNAVAILABLE`。
+
+**实现**：**`routes/adminProduct.js`**；**`middleware/requireAdmin.js`**、**`lib/adminAccess.js`**、**`lib/productWriteSchema.js`**。
+
+**写后**：**`invalidateProductDetailById`**（B5.9）；与 **`products.json`/`productsData` 双源`** 策略见 develop2 **§9.9.4**（默认 **S1**：改库后首页仍读 JSON，需同步或 **S2** 迭代）。
+
 ### 4.3 B2 画像 CRUD（`/api/profile*`）
 
 **鉴权**：全部 **`Authorization: Bearer <token>`**；**`user_id` 仅来自 JWT**，Body 勿传 `user_id`。
@@ -445,14 +499,13 @@
 
 ## 8. 规划中接口（仍待实现）
 
-下表为 **尚未** 在验证端落地的端点；**B5～B7** 已实现，见 **§2**、**§4.2.3～§4.2.5**（[develop2.md](develop2.md) **§9.6～§9.8**）。
+下表为 **尚未** 在验证端落地的端点；**B5～B7、B9** 已实现，见 **§2**、**§4.2.3～§4.2.6**（[develop2.md](develop2.md) **§9.6～§9.9**）。**排期**：**B8** 联盟在 **B9** 之后（develop2 篇首「下一增量」）。
 
 ### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
-| `GET /api/purchase/url` | **B8** 联盟转链 |
-| 商品 CRUD | **B9** 极简后台 |
+| `GET /api/purchase/url` | **B8** 联盟转链（**后移**：建议在 **B9** 可维护 **`affiliate_url`** 之后再开发） |
 
 ---
 
@@ -460,7 +513,7 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`**、**`/api/favorite`**、**`/api/event`**；**`collect`** 可选双写 |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`**、**`/api/favorite`**、**`/api/event`**、**`/api/admin/products`**；**`collect`** 可选双写 |
 | `prototype/server/routes/event.js` | **B7**：**`POST /api/event`** |
 | `prototype/server/lib/eventPayload.js` | **B7**：校验 **`event`**、组装 **`extra`** |
 | `prototype/server/lib/eventDb.js` | **B7**：**`INSERT INTO event`** |
@@ -469,6 +522,10 @@
 | `prototype/server/lib/favoriteHelpers.js` | **B6**：分页、**`productId`** 解析、列表项映射 |
 | `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4/**B5** 复用） |
 | `prototype/server/routes/product.js` | **B5**：**`GET /api/product/:id`** |
+| `prototype/server/routes/adminProduct.js` | **B9**：**`/api/admin/products`** CRUD |
+| `prototype/server/middleware/requireAdmin.js` | **B9**：运营鉴权（在 **`requireAuth`** 之后） |
+| `prototype/server/lib/adminAccess.js` | **B9**：**`ZHILI_ADMIN_USER_IDS`** / **`role: admin`** / 本地 dev bypass |
+| `prototype/server/lib/productWriteSchema.js` | **B9**：写 Body 校验、**`rowToAdminProduct`** |
 | `prototype/server/lib/productMapper.js` | **B5**：`product` 表行 → 内核对象 |
 | `prototype/server/lib/productResolve.js` | **B5**：**`resolveProductById`**（DB→内存回退） |
 | `prototype/server/lib/productDetailCache.js` | **B5.9**：详情 Redis key、**TTL**、**`invalidateProductDetailById`** |
@@ -488,7 +545,7 @@
 
 ---
 
-## 10. Postman 验证（B1、B2、B6、B7 与其余 API）
+## 10. Postman 验证（B1、B2、B6、B7、B9 与其余 API）
 
 ### 10.1 前置条件
 
@@ -601,8 +658,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）**、**`/api/favorite*`（B6）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。**B6** 需 **`npm run seed`** 后 **`product`** 表含目标 **`product_id`**。**B7** 含 **`POST /api/event`**（集合内独立请求）及可选 **`EVENT_DB_DUAL_WRITE`** 与 **`collect`** 联调。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）**、**`/api/favorite*`（B6）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。**B6** 需 **`npm run seed`** 后 **`product`** 表含目标 **`product_id`**。**B7** 含 **`POST /api/event`**（集合内独立请求）及可选 **`EVENT_DB_DUAL_WRITE`** 与 **`collect`** 联调。**B9** 文件夹 **`/api/admin/products*`**：服务端需 **`ZHILI_ADMIN_USER_IDS`**（填当前登录用户的 **`user.id`**，先跑 **`GET /api/user/me`**）或本地 **`ZHILI_DEV_ADMIN_ANY_USER=1`**。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`** + **B7** **`POST /api/event`** / **`collect` 双写**；Redis 可降级）；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`** + **B7** **`POST /api/event`** / **`collect` 双写** + **B9** **`/api/admin/products*`**；**§8** 仅剩 **B8** 规划；Redis 可降级）；`develop.md` / `develop1.md` 已废止。

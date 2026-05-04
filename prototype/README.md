@@ -190,6 +190,20 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 **自测**：`npm run dev:db` + migrate → **`POST /api/event`**（Body 与 §10.6 `collect` 示例一致）→ MySQL `SELECT * FROM event ORDER BY id DESC LIMIT 1;`。再设 **`EVENT_DB_DUAL_WRITE=1`** 发 **`collect`**，应新增 **`event` 行**。
 
+## B9 商品写（`/api/admin/products*`）
+
+与 **[api.md](../api.md) §4.2.6** 一致：**Bearer** + **运营**（**`ZHILI_ADMIN_USER_IDS`** 填 **`GET /api/user/me`** 的 `user.id`，逗号分隔；或 JWT **`role: admin`**；**仅本地**可设 **`ZHILI_DEV_ADMIN_ANY_USER=1`**）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/admin/products` | 列表 **`{ list, total }`** |
+| `GET` | `/api/admin/products/:productId` | 单条 **`{ product }`** |
+| `POST` | `/api/admin/products` | 新建；**201** |
+| `PUT` | `/api/admin/products/:productId` | 部分字段更新；**200** |
+| `DELETE` | `/api/admin/products/:productId` | 物理删；**204** |
+
+**自测**：在 **`server/.env`** 增加 **`ZHILI_DEV_ADMIN_ANY_USER=1`**（测完删除）→ Login → **`GET /api/admin/products?limit=5`** → **`POST /api/admin/products`**（Body 含 **`id`**、**`title`**、**`price`**）→ **`PUT`** 改 **`affiliateUrl`** → **`DELETE`** 清理。Postman 见 **`postman/zhili-prototype.postman_collection.json`** 文件夹 **B9**。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell
