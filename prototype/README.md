@@ -167,6 +167,18 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 **自测**：**`GET /api/product/p001`**（无 Auth）→ 带 **Bearer** 再 GET（需默认画像，理由可能变化）→ 起 Redis 时同一 URL 连发两次观察命中。
 
+## B6 收藏（`/api/favorite*`）
+
+需 **Bearer**、**MySQL** 且 **`npm run seed`** 后 **`product`** 表含对应 **`product_id`**（外键）。详见 **[api.md](../api.md) §4.2.4**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/favorite` | Body：`{ "productId": "p001" }`（或 **`product_id`**）。**201** 新建；重复 **200** + **`already: true`**。 |
+| `DELETE` | `/api/favorite/p001` | 成功 **204** 无 body；未收藏 **404** `NOT_IN_COLLECTION`。 |
+| `GET` | `/api/favorite/list` | Query **`offset`/`limit`**（默认 20、最大 50）；**`{ list, total }`**。 |
+
+**自测**：Login 取 token → **`POST /api/favorite`**（`p001`）→ **`GET /api/favorite/list`** → **`DELETE /api/favorite/p001`**（204）→ 再 DELETE 应 **404**。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell

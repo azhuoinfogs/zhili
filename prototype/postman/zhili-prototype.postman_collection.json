@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "c4f8a1b2-3d5e-6f70-8a9b-0c1d2e3f4a5b",
-    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+验证流）",
-    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
+    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+B6+验证流）",
+    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B6 收藏需 **MySQL + seed**（`product` 表含 `p001` 等），Bearer。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4/B6 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -96,6 +96,49 @@
         "header": [],
         "url": "{{base_url}}/api/product/p001",
         "description": "B5：商品详情，默认无登录即可 200。若需登录态理由：Authorization → Bearer {{token}}（需默认画像）。第二次 Send 可验 Redis（需已起 Redis）。"
+      }
+    },
+    {
+      "name": "POST /api/favorite (B6)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"p001\"\n}"
+        },
+        "url": "{{base_url}}/api/favorite",
+        "description": "B6：需先 Login；`npm run seed` 后 `p001` 在 `product` 表。首次 **201**；重复 Send **200** + `already: true`。"
+      }
+    },
+    {
+      "name": "GET /api/favorite/list (B6)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/favorite/list?offset=0&limit=20",
+        "description": "B6：`{ list, total }`，项为 `productId` + `createdAt`。"
+      }
+    },
+    {
+      "name": "DELETE /api/favorite/p001 (B6)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "DELETE",
+        "header": [],
+        "url": "{{base_url}}/api/favorite/p001",
+        "description": "B6：成功 **204** 无 body；未收藏时 **404** `NOT_IN_COLLECTION`。"
       }
     },
     {

@@ -9,6 +9,7 @@ import userRouter from './routes/user.js';
 import profileRouter from './routes/profile.js';
 import recommendRouter from './routes/recommend.js';
 import productRouter from './routes/product.js';
+import favoriteRouter from './routes/favorite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
 import { relatedProductCards } from './lib/relatedCore.js';
@@ -66,6 +67,7 @@ app.use('/api/user', userRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/recommend', recommendRouter);
 app.use('/api/product', productRouter);
+app.use('/api/favorite', favoriteRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 

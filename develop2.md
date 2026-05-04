@@ -1,8 +1,8 @@
 # 知礼 · 整合开发计划（develop2）
 
 **版本**：v3.0  
-**更新**：2026-05-04（**B4** **`GET /api/recommend`** + **`lib/recommendCache.js`** + 画像写后 **`DEL`**；**B3** **`recommendCore`**；[api.md](api.md) **§4.2.2**；**§9.5.0** 落地快照）  
-**状态**：待评审（仓库 **B0 + B1 + B2 + B3 + B4（主路径）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
+**更新**：2026-05-04（**B6** **`/api/favorite*`** 已实现；**§9.7.0** 快照；[api.md](api.md) **§4.2.4**；**B4** **`GET /api/recommend`** + **`lib/recommendCache.js`** + 画像写后 **`DEL`**；**B3** **`recommendCore`**；**§9.5.0** 落地快照）  
+**状态**：待评审（仓库 **B0 + B1 + B2 + B3 + B4 + B5 + B6（主路径）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
 
@@ -15,18 +15,18 @@
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、**`GET /api/product/:id`（B5）**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**；**B4**：**`GET /api/recommend`**（**`page`/`size`** + **Redis** 可降级，**Bearer**）；**B5**：详情 **可选 Bearer** + **`profile` Query** + 详情 **Redis** 可降级；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1～§4.2.3、§4.3、§10**；B2 自测见本文 **§9.3.4** |
+| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、**`GET /api/product/:id`（B5）**、**`POST/DELETE /api/favorite`、`GET /api/favorite/list`（B6）**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**；**B4**：**`GET /api/recommend`**（**`page`/`size`** + **Redis** 可降级，**Bearer**）；**B5**：详情 **可选 Bearer** + **`profile` Query** + 详情 **Redis** 可降级；**B6**：收藏 **Bearer** + **`collection`**；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1～§4.2.4、§4.3、§10**；B2 自测见本文 **§9.3.4** |
 | **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条** |
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
 | **阶段 A（H5）** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐（排期见附录 A §三） |
-| **MVP 后端（B0～）** | **B0+B1+B2+B3+B4+B5（主路径）已具备** | **B0** 同前。**B1** 同前。**B2** 同前。**B3**（**§9.4.0**）。**B4**：**`routes/recommend.js`**、**`lib/recommendCache.js`**、**`GET /api/recommend`**；**B2 写画像后** **`invalidateUserRecommendations`**；**B4 余量**：**B4.8～B4.9** 限流/观测、**B4.11** 压测报告，见 **§9.5.0**。**B5**：**`GET /api/product/:id`**、**`resolveProductById`**、**`/api/related` 共源**、详情 **Redis**（**§9.6.0**）。**B6+**：`/api/favorite*`、联盟转链等仍待开发 |
+| **MVP 后端（B0～）** | **B0+B1+B2+B3+B4+B5+B6（主路径）已具备** | **B0** 同前。**B1** 同前。**B2** 同前。**B3**（**§9.4.0**）。**B4**：**`routes/recommend.js`**、**`lib/recommendCache.js`**、**`GET /api/recommend`**；**B2 写画像后** **`invalidateUserRecommendations`**；**B4 余量**：**B4.8～B4.9** 限流/观测、**B4.11** 压测报告，见 **§9.5.0**。**B5**：**`GET /api/product/:id`**、**`resolveProductById`**、**`/api/related` 共源**、详情 **Redis**（**§9.6.0**）。**B6**：**`routes/favorite.js`**、**`lib/favoriteHelpers.js`**、**`favorite.test.mjs`**（**§9.7.0**）。**B7+**：**`/api/purchase/url`** 等仍待 **B8** |
 | **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
 **本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`；**若用 Docker MySQL/Redis**，先在该 README 完成 compose 与 `npm run dev:db`，保证 `server/.env` 中 **`DB_PASSWORD` 与 `MYSQL_ROOT_PASSWORD` 一致**；改密后旧卷需 `docker:mysql-fresh` 或手动 `ALTER USER`）。
 
-**下一增量（与 §9.1 顺序一致）**：（**B9** 商品写接口可部分并行）→ **B3/B4 收尾**（§9.4.0、§9.5.0 余量）→ **B5**（**§9.6**）～**B8** → **B10** 联调硬化。（**B1～B4 主链已落地**。）
+**下一增量（与 §9.1 顺序一致）**：（**B9** 商品写接口可部分并行）→ **B3/B4 收尾**（§9.4.0、§9.5.0 余量）→ **B8** 联盟 → **B10** 联调硬化。（**B1～B6 主链已落地**。）
 
 ---
 
@@ -64,7 +64,7 @@
 | 模块 | 已实现 | 仍为缺口 |
 |------|--------|----------|
 | H5 | 同快照表 | 多画像、微信登录、收藏列表持久化 |
-| API | 同快照表 | develop1 风格登录/画像/收藏/转链 REST |
+| API | 同快照表 | **收藏 REST（B6）** 已具备；转链 **B8** 等 develop1 余项仍待 |
 | 数据 | **200** 条商品 JSON；API 返回 `images[]`；**Docker 下可** `seed` 落 **`product` 表**与库表结构对齐 | 联盟字段、运营后台；**线上**仍以 develop1 数据层为准 |
 | 小程序 | 三页 + PRD 色顶栏 | WeUI 全量、登录、与 H5 同等交互、埋点全量 |
 | 后台 / 联盟 | — | develop1 §3.2、CPS；**本机** MySQL/Redis 已由 Docker 编排覆盖，**不等同**生产托管与联盟 |
@@ -144,7 +144,7 @@
 | `user` | 匿名 `zhili_vid`（字符串） | 微信登录后写入 `openid`；可保留 `device_id`/`anon_id`  varchar 关联历史埋点 |
 | `user_profile` | 浏览器单次画像 JSON；服务端表见 **`migrations/001`+`002`** | 列 **`age_band`、`interests` JSON、`occasion`、`style`、`taboos`** 与 **`POST /api/personalized` / `scoring.js`** 一致（**策略 A**，§9.3.1）；**B2** **`/api/profile*`** 已实现 |
 | `product` | `products.json` 行 | `id`→`product_id`；`title`→`name`；**`styles` 数组**→develop1 单 `style` enum：取主风格或拆成 `styles` json 改表 |
-| `collection` | 无持久化 | 新表 + `POST/DELETE /api/favorite*`（见 §7） |
+| `collection` | **`/api/favorite*` 已读写**（B6） | 表随 B0；契约 **§9.7**、[api.md](api.md) **§4.2.4** |
 | `event` | `events.jsonl` 多字段 JSON | `event_type` ← `event`；`extra` ← 其余字段 JSON；`user_id` 登录后 FK，未登录可写 0 + `extra.zhili_vid` |
 
 ### 6.2 枚举与中英文（develop1 SQL ↔ API）
@@ -187,7 +187,7 @@
 | `POST /api/profile` 等画像 CRUD | 持久化多画像 | Body 字段与 **`personalized` 画像段** 同名（英文键），便于复用 `scoring.js` |
 | `GET /api/recommend` | `page`、`size` | **`offset=(page-1)*size`，`limit=size`**；网关按 `user`+`zhili_group` 或业务规则选 **`GET /api/hot`** 或 **`POST /api/personalized`** |
 | `GET /api/product/:id` | 详情 | 可从 MySQL 读；或代理读静态 JSON + **与 `/api/related/:id` 同包部署**；**开发任务与验收**见 **§9.6** |
-| `POST/DELETE /api/favorite`、`GET /api/favorite/list` | 收藏 | **新实现**；与埋点分离 |
+| `POST/DELETE /api/favorite`、`GET /api/favorite/list` | 收藏 | **已实现（B6）**；与埋点分离 |
 | `POST /api/event` | 结构化事件表写入 | **可选**：与 `POST /api/collect` 二选一或双写（collect 兼容验证脚本） |
 | `GET /api/purchase/url` | 联盟转链 | 新写；`product` 表增 `affiliate_url` / PID 字段 |
 
@@ -231,7 +231,7 @@
 | B3  | **推荐内核对接**       | **目的**：登录后推荐以 **B2 默认画像** 为输入，与 **`POST /api/personalized`**、**`scoring.js`** 同源、不漂移。**边界**：**不**实现对外 **`GET /api/recommend`**、**不上 Redis**（**B4**）。详见 **§9.4**                                                                                             | B0、B1、B2 | **主路径已实现**：**`lib/recommendCore.js`**、**`productsData.js`**、**`GET /api/user/recommend`**（[api.md](api.md) §4.2.1）；**`index.js`** 已切至 **`recommendCore`**。**余量**见 **§9.4.0**                                                                                                                                                         |
 | B4  | **推荐网关 + Redis** | **目的**：对外 **`GET /api/recommend`**；**B3 内核**之上 **分页**、**Redis**、**失效**、**降级**；可选限流/观测见 **§9.5.0 余量**。**边界**：**不**改写 **`scoring.js`**。详见 **§9.5**                                                                                                                                                            | B3、B0、B1 | **主路径已实现**：**`routes/recommend.js`**、**`lib/recommendCache.js`**、**`recommend.test.mjs`**；**`profile.js`** 写后 **`DEL`**；契约 [api.md](api.md) **§4.2.2**。**余量**见 **§9.5.0**                                                                                                                                                               |
 | B5  | **商品读模型（详情）** | **`GET /api/product/:id`**：DB/内存统一解析、**`enrich`/`buildReasonLines`** 与列表同源；可选 **`profile` query** 与 **Bearer 默认画像**；**不**做收藏/转链/写库。目的、边界、数据源、WBS 见 **§9.6**                                                                                                                                                                                            | B0、（B1、B2 若采用登录态理由） | **主路径已实现**：**`routes/product.js`**、**`lib/productMapper.js`**、**`lib/productResolve.js`**、**`lib/productDetailCache.js`**、**`lib/relatedCore.js`**、**`middleware/optionalAuth.js`**、**`product.test.mjs`**；契约 [api.md](api.md) **§4.2.3**。**余量**：画像变更不主动清详情缓存（依赖 **TTL**；若需可后续 **`SCAN`** 策略）                                                                                                                                                |
-| B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                               | B1           | 收藏幂等与列表分页                                                                                                                                                              |
+| B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 **`collection`**（**§9.7**）；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                               | B0、B1       | **主路径已实现**：**`routes/favorite.js`**、**`lib/favoriteHelpers.js`**、**`favorite.test.mjs`**；契约 [api.md](api.md) **§4.2.4**；**细化 WBS**见 **§9.7**                                                                                                                                                              |
 | B7  | **埋点入库（可选）**     | `POST /api/event` 写 `event`；或与验证端 **`POST /api/collect` 双写**、网关转发；匿名 `zhili_vid` 进 `extra`（§6.1）                                                                                                                                                         | B0、B1（可选）    | 与 CSV/分析脚本字段可对齐                                                                                                                                                        |
 | B8  | **联盟转链**         | `GET /api/purchase/url`；`product` 联盟字段；超时重试≤2、结果缓存（§13）                                                                                                                                                                                                  | B0           | 可跳转真实/沙箱链接                                                                                                                                                             |
 | B9  | **商品写接口（极简后台）**  | develop1 后台依赖的 **商品 CRUD API**；权限与运营账号（可与 B1 分角色）                                                                                                                                                                                                        | B0、B1        | 后台可录入/改价签                                                                                                                                                              |
@@ -521,6 +521,71 @@
 | **B5.9** | **详情短缓存（可选）** | Redis key 如 **`product:detail:{id}`**，TTL **60～300s**；**B9 写商品后 DEL**（与 **§8.3** 推荐键并列文档）。**验收**：可并入 **B10** 压测。 | B5.4、B0 |
 | **B5.10** | **安全与 payload** | 路径 **白名单**；保证单商品 JSON **体积极小**（**≤256KB** 远低于上限）。 | B5.4 |
 
+### 9.7 B6 收藏业务（目的、边界与 WBS）
+
+> **人天参照**：develop1 行「收藏与 `POST /api/event`」合计约 **2 人日**；**B6 仅占收藏 REST + 表读写**，在 **`collection` 已随 B0 建表**、**B1 鉴权已就绪** 的前提下，可按 **约 0.5～1.5 人日**（含契约、路由、单测、文档；**不含**小程序收藏 UI，属前端排期）。
+
+#### 9.7.0 本仓库落地快照（与代码同步）
+
+| 项 | 状态 |
+|----|------|
+| **表 `collection`** | **已具备**（**`001_b0_schema.sql`**）：**`UNIQUE (user_id, product_id)`**、外键 **`user`** / **`product`** |
+| **`POST/DELETE /api/favorite*`、`GET /api/favorite/list`** | **已具备**：**`routes/favorite.js`**、**`lib/favoriteHelpers.js`**；**`DELETE` 成功 `204`**；未收藏 **`404` `NOT_IN_COLLECTION`**；**`POST` 重复 `200` + `already: true`**；契约 [api.md](api.md) **§4.2.4** |
+| **与埋点隔离** | **`POST /api/collect`** 仍为 **仅埋点**（**§7.1**）；业务收藏 **不得** 复用该路径 |
+
+#### 9.7.1 目的（为什么要做 B6）
+
+| 维度 | 说明 |
+|------|------|
+| **PRD 闭环** | **§4.1 / §11.1**：详情与列表 **收藏状态一致**；**收藏列表可浏览、可删除**（与 H5 当前「Toast + 埋点」区分）。 |
+| **数据归属** | 收藏写入 **`user_id`（JWT）** 隔离的 **`collection`** 行，可审计、可联调小程序 **F4**。 |
+| **与验证端并存** | 匿名 **`zhili_vid`** 仍可走 **`collect` 事件** 作漏斗；**登录用户** 以 **`/api/favorite*`** 为 **唯一** 业务真相源（产品可约定：登录后列表只读库、未登录仅本地/埋点）。 |
+
+#### 9.7.2 边界（B6 不包含）
+
+| 项 | 归属 |
+|----|------|
+| **埋点上报**、**`events.jsonl`**、**`POST /api/collect`** | **保持现状**；B6 **不调** collect 写收藏 |
+| **推荐列表 / 详情理由 / Redis** | **B3/B4/B5**；B6 **不** 失效推荐缓存（收藏不改变画像与筛选项）；若产品要求「收藏加权」属后续迭代 |
+| **联盟购买链接** | **B8** |
+| **`event` 表双写** | **B7（可选）** |
+| **小程序/H5 收藏按钮 UI** | 前端排期（附录 A **F4**）；B6 只交付 **HTTP API** |
+
+#### 9.7.3 与库表 **`collection`** 对齐（B0 已建）
+
+| 列 | 说明 |
+|----|------|
+| **`id`** | 自增主键；列表排序可按 **`created_at DESC, id DESC`** |
+| **`user_id`** | **仅来自 JWT `sub`**，与 **`requireAuth`** 一致；**禁止** Body 传 `user_id` |
+| **`product_id`** | **`VARCHAR(32)`**，与 **`product.product_id`**、**`products.json` 的 `id`** 同一套 id 空间；写入前建议 **`resolveProductById`** 或 **`SELECT 1 FROM product WHERE product_id=?`** 校验存在性 → 不存在 **404** |
+| **`created_at`** | 收藏时间 |
+
+**唯一约束**：**`UNIQUE(user_id, product_id)`** 支撑 **幂等收藏**（重复 `POST` → **200**，不新增第二行）。
+
+#### 9.7.4 HTTP 契约（冻结后写入 [api.md](api.md) §4 新小节）
+
+| 方法 | 路径 | 要点 |
+|------|------|------|
+| **`POST`** | **`/api/favorite`** | **Body**：**`productId`** 或 **`product_id`**（**`productId` 优先**）。**鉴权**：**`requireAuth`**。**`201`** 新建；重复收藏 **`200`** + **`{ productId, createdAt, already: true }`**。id 白名单 **`^[a-zA-Z0-9_-]{1,32}$`**，非法 **400**。 |
+| **`DELETE`** | **`/api/favorite/:productId`** | 成功 **`204`** 无 body；未收藏 **`404` `NOT_IN_COLLECTION`**；非法路径 **400**。 |
+| **`GET`** | **`/api/favorite/list`** | Query：**`offset`/`limit`**（与 **`GET /api/profile`** 一致：**默认 offset=0、limit=20、limit≤50**）。响应：**`{ list, total }`**；**`list[]`** 每项至少含 **`productId`、`createdAt`**；是否 **JOIN `product`** 展开标题/首图由 **B6.1** 定（建议 **最小字段 + 客户端再拉 B5 详情** 以降低 JOIN 成本，或 **嵌套轻量 `ProductCard`** 与 **§7** 对齐）。 |
+
+#### 9.7.5 与 B5、B10、前端的衔接
+
+- **B5**：列表项可带 **`productId`**，详情页 **并发** **`GET /api/product/:id`** 与 **`GET /api/favorite/list`**（或详情接口扩展 **`isFavorite`** 属 **可选优化**，避免拖慢 B5 P99）。  
+- **埋点**：业务收藏成功后可 **额外** 打 **`collect` 事件**（前端行为），**服务端 B6 不写 jsonl**（除非 B7 另有设计）。  
+- **B10**：联调清单增加 **401 未登录、重复收藏幂等、分页 total、删除后列表一致**。
+
+#### 9.7.6 子任务与验收（WBS）
+
+| 子项 | 任务 | 要点与验收 | 依赖 |
+|------|------|------------|------|
+| **B6.1** | **契约冻结** | **已实现**：[api.md](api.md) **§4.2.4**；Postman 集合含 B6 三请求。 | B1.5 |
+| **B6.2** | **`routes/favorite.js`** | **已实现**：**`requireAuth`**；**`POST`/`DELETE`/`GET /list`**；**`LIMIT`/`OFFSET`** 整数拼入。 | B6.1、B0 |
+| **B6.3** | **商品存在性** | **已实现**：**`POST`** 前 **`SELECT 1 FROM product`**；不存在 **404**。 | B6.2 |
+| **B6.4** | **单测 `favorite.test.mjs`** | **已实现**：**`favoriteHelpers`**（id、分页、**`pickFavoriteProductId`**、**`rowToFavoriteListItem`**）；集成测（401/DB）可后续补。 | B6.2～B6.3 |
+| **B6.5** | **文档与篇首** | **已实现**：本文 **§9.7.0**、篇首、**§9.1**、**[prototype/README.md](prototype/README.md)**「B6」。 | B6.4 |
+
 | 模块       | 任务                                        | 人天     | 负责人 |
 | -------- | ----------------------------------------- | ------ | --- |
 | 后端       | 数据库设计与初始化                                 | 1      | 后端  |
@@ -806,4 +871,4 @@ flowchart TB
 
 [prd_v0.md](prd_v0.md) · [plan0.md](plan0.md) · [prototype-spec.md](prototype-spec.md) · [api.md](api.md) · [prototype/README.md](prototype/README.md)
 
-**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4**、**§9.3.5** 与 **§9.5.3**。**B4** 实现 **`GET /api/recommend`、缓存 key、失效策略** 变更时同步 **§9.5**、**§8.3** 与 [api.md](api.md) **§8**（规划段落地后改已实现表）。**B5** 实现 **`GET /api/product/:id`、mapper、`resolve`、与 related 是否共源** 变更时同步 **§9.6.0**、[api.md](api.md) **§7 与新增详情节**、**§2 已实现表**、Postman。
+**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4**、**§9.3.5** 与 **§9.5.3**。**B4** 实现 **`GET /api/recommend`、缓存 key、失效策略** 变更时同步 **§9.5**、**§8.3** 与 [api.md](api.md) **§8**（规划段落地后改已实现表）。**B5** 实现 **`GET /api/product/:id`、mapper、`resolve`、与 related 是否共源** 变更时同步 **§9.6.0**、[api.md](api.md) **§7 与新增详情节**、**§2 已实现表**、Postman。**B6** 实现 **`/api/favorite*`** 时同步 **§9.7.0**、篇首 API 行、[api.md](api.md) **§4.2.x（收藏专节）**、Postman。

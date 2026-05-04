@@ -13,14 +13,14 @@
 | **前缀** | 除导出 CSV 外，业务接口均在 **`/api`** 下 |
 | **JSON** | `Content-Type: application/json`；请求体上限约 **256KB** |
 | **CORS** | 开发态已开启，跨域按部署环境自行收紧 |
-| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；**`GET /api/product/:id`** 为 **可选 Bearer**（见 **§4.2.3**）；`hot`/`personalized`/`collect` 等仍可不登录 |
+| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`**、**`/api/profile*`**、**`/api/favorite*`** 要求 **`Authorization: Bearer <JWT>`**；**`GET /api/product/:id`** 为 **可选 Bearer**（见 **§4.2.3**）；`hot`/`personalized`/`collect` 等仍可不登录 |
 
 ### 1.1 重要：埋点与收藏路径（develop2 §7.1）
 
 | 路径 | 用途 |
 |------|------|
 | **`POST /api/collect`** | **仅埋点**上报，写入 `events.jsonl` / 同步 CSV |
-| **业务收藏** | **未实现**；MVP 约定为 **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**，**禁止**占用 `/api/collect` |
+| **业务收藏** | **`POST /api/favorite`**、**`DELETE /api/favorite/:productId`**、**`GET /api/favorite/list`**（**B6**，见 **§4.2.4**）；**禁止**占用 `/api/collect` |
 
 ---
 
@@ -46,6 +46,9 @@
 | `PUT` | `/api/profile/:id` | **B2** 全量更新；Bearer |
 | `PUT` | `/api/profile/:id/default` | **B2** 设为默认（幂等）；Bearer |
 | `DELETE` | `/api/profile/:id` | **B2** 删除；仅剩一条时 **409**；Bearer |
+| `POST` | `/api/favorite` | **B6** 添加收藏；Body **`productId`**（或 **`product_id`**）；Bearer |
+| `DELETE` | `/api/favorite/:productId` | **B6** 取消收藏；成功 **204** 无 body；Bearer |
+| `GET` | `/api/favorite/list` | **B6** 收藏列表；Query **`offset`/`limit`**（同 B2，默认 20、最大 50）；Bearer |
 
 > H5 仍可用 **`localStorage.zhili_profile`** 直传 **`/api/personalized`**；与 **`/api/profile`** 服务端持久化可并行存在。
 
@@ -240,6 +243,49 @@
 
 实现：**`routes/product.js`**；**`lib/productMapper.js`**、**`lib/productResolve.js`**、**`lib/productDetailCache.js`**；可选鉴权：**`middleware/optionalAuth.js`**。
 
+### 4.2.4 `/api/favorite*`（B6 · 业务收藏）
+
+**说明**：读写 MySQL **`collection`** 表（**`UNIQUE(user_id, product_id)`**）；**`user_id` 仅来自 JWT**。**`POST` 前** 校验 **`product` 表** 存在该行（满足外键与「仅可收藏已入库商品」）；无 DB 时全部 **503** `DB_UNAVAILABLE`。
+
+**鉴权**：全部 **`Authorization: Bearer`**（同 **`requireAuth`**）。
+
+#### `POST /api/favorite`
+
+**Body**（JSON）：**`productId`** 或 **`product_id`**（字符串，二选一；同时存在时 **`productId` 优先**）。须匹配 **`^[a-zA-Z0-9_-]{1,32}$`**。
+
+| HTTP | 响应体 | 说明 |
+|------|--------|------|
+| **201** | `{ "productId", "createdAt" }` | 新建收藏；`createdAt` 为 ISO8601 |
+| **200** | `{ "productId", "createdAt", "already": true }` | 已收藏（幂等，**不**新增行） |
+| **400** | `BAD_REQUEST` | 缺 id 或格式非法 |
+| **404** | `NOT_FOUND` | **`product` 表** 无此 `product_id` |
+| **401** | `UNAUTHORIZED` | 同 §4.2 |
+| **503** | `DB_UNAVAILABLE` | 无数据库连接 |
+
+#### `DELETE /api/favorite/:productId`
+
+路径参数规则同 **`POST`** 的 id 白名单。
+
+| HTTP | 说明 |
+|------|------|
+| **204** | 删除成功，**无 body** |
+| **404** | `NOT_IN_COLLECTION` 未收藏该商品 |
+| **400** | `BAD_REQUEST` 非法路径参数 |
+| **401** / **503** | 同上 |
+
+#### `GET /api/favorite/list`
+
+**Query**：**`offset`**（默认 `0`）、**`limit`**（默认 `20`，最大 `50`）；与 **`GET /api/profile`** 分页语义一致。
+
+**成功 200**：`{ "list": FavoriteListItem[], "total": number }`，其中 **`FavoriteListItem`** = `{ "productId": string, "createdAt": string }`，按 **`created_at DESC, id DESC`**。
+
+| HTTP | `error` | 说明 |
+|------|---------|------|
+| **401** | `UNAUTHORIZED` | 无 token / 无效 token |
+| **503** | `DB_UNAVAILABLE` | 无数据库 |
+
+实现：**`routes/favorite.js`**；**`lib/favoriteHelpers.js`**（分页与 id 解析）。
+
 ### 4.3 B2 画像 CRUD（`/api/profile*`）
 
 **鉴权**：全部 **`Authorization: Bearer <token>`**；**`user_id` 仅来自 JWT**，Body 勿传 `user_id`。
@@ -369,13 +415,12 @@
 
 ## 8. 规划中接口（仍待实现）
 
-下表为 **尚未** 在验证端落地的端点；**B5** **`GET /api/product/:id`** 已实现，见 **§2**、**§4.2.3**（develop2 **§9.6**）。**B2～B4** 见 **§2**、**§4.2.x** / **§4.3**（[develop2.md](develop2.md) **§9.5** 等）。
+下表为 **尚未** 在验证端落地的端点；**B5** **`GET /api/product/:id`** 见 **§2**、**§4.2.3**；**B6** **`/api/favorite*`** 见 **§2**、**§4.2.4**（[develop2.md](develop2.md) **§9.7**）。
 
 ### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
-| `POST/DELETE /api/favorite`、`GET /api/favorite/list` | **B6** |
 | `GET /api/purchase/url` | **B8** 联盟转链 |
 | `POST /api/event` | **B7** 可选入库 |
 | 商品 CRUD | **B9** 极简后台 |
@@ -386,7 +431,9 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`** |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`**、**`/api/favorite`** |
+| `prototype/server/routes/favorite.js` | **B6**：**`POST/DELETE /api/favorite`**、**`GET /api/favorite/list`** |
+| `prototype/server/lib/favoriteHelpers.js` | **B6**：分页、**`productId`** 解析、列表项映射 |
 | `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4/**B5** 复用） |
 | `prototype/server/routes/product.js` | **B5**：**`GET /api/product/:id`** |
 | `prototype/server/lib/productMapper.js` | **B5**：`product` 表行 → 内核对象 |
@@ -408,7 +455,7 @@
 
 ---
 
-## 10. Postman 验证（B1、B2 与其余 API）
+## 10. Postman 验证（B1、B2、B6 与其余 API）
 
 ### 10.1 前置条件
 
@@ -416,7 +463,8 @@
 2. **确认端口**：默认 `3000`；若顺延，读 **`prototype/server/.listen-port`**，Postman 里 **`{{base_url}}`** 与之对齐。  
 3. **本地登录（无微信密钥）**：在 **`prototype/server/.env`** 中设置 **`WECHAT_MOCK=1`**，否则 `POST /api/user/login` 会返回 **`WECHAT_NOT_CONFIGURED`**（503）。  
 4. **可选**：设置 **`JWT_SECRET`** 为随机长串，便于 `GET /api/health` 里 **`jwt_strong_secret`** 为 `true`（与生产习惯一致）。  
-5. **Redis（B4 / B5 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`**、**`GET /api/product/:id`** 仍 **200**，只是无缓存命中。
+5. **Redis（B4 / B5 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`**、**`GET /api/product/:id`** 仍 **200**，只是无缓存命中。  
+6. **B6 收藏**：需在 **`prototype/server`** 执行 **`npm run seed`**（或等价写入 **`product`** 表），否则 **`POST /api/favorite`** 对 **`p001`** 等会 **404** `NOT_FOUND`。
 
 ### 10.2 Postman 环境变量
 
@@ -445,6 +493,9 @@
 | 3c | `GET` | `{{base_url}}/api/profile/default` | **Bearer**；无默认时 **404** |
 | 3d | `GET` | `{{base_url}}/api/profile/{{profile_id}}` | **Bearer**；需有效 **`profile_id`** |
 | 3e | `PUT` | `{{base_url}}/api/profile/{{profile_id}}/default` | **Bearer**；设为默认 |
+| 3f | `POST` | `{{base_url}}/api/favorite` | **Bearer**；Body **`{"productId":"p001"}`**；**B6**；需 **`npm run seed`** 后 `product` 表含 `p001`；首次 **201**、重复 **200** + `already` |
+| 3h | `GET` | `{{base_url}}/api/favorite/list?offset=0&limit=20` | **Bearer**；**B6**；`{ list, total }` |
+| 3i | `DELETE` | `{{base_url}}/api/favorite/p001` | **Bearer**；**B6**；成功 **204**；未收藏 **404** |
 | 4 | `GET` | `{{base_url}}/api/hot?occasion=birthday&budget=100-300&style=practical&offset=0&limit=5` | 无 |
 | 5 | `POST` | `{{base_url}}/api/personalized` | Body **raw JSON**，见 §10.4 |
 | 6 | `GET` | `{{base_url}}/api/related/p001` | 无；或加 Query **`profile`**（JSON 字符串，见 §10.5） |
@@ -515,8 +566,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）**、**`/api/favorite*`（B6）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。**B6** 需 **`npm run seed`** 后 **`product`** 表含目标 **`product_id`**。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。
