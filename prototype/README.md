@@ -6,6 +6,107 @@
 
 **页面流程**：`landing`（可选品牌首屏）→ `tags`（画像与标签）→ `browse`（推荐列表）→ 详情抽屉。与 [`plan0.md`](../plan0.md) 最小三屏的对应关系见 `prototype-spec.md` §2。
 
+## 本机 Docker（MySQL + Redis，一键建库）
+
+需已安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)（或 Docker Engine + Compose v2）。**默认占用本机 3306、6379**；若与本机已有 MySQL/Redis 冲突，请先停掉本机服务或改 `docker-compose.yml` 中的端口映射。
+
+在 **`prototype` 目录**执行（**一条命令**：起容器 → 等 MySQL 就绪 → 若无 `server/.env` 则从模板创建 → `migrate` + `seed`）：
+
+```bash
+cd prototype
+npm run dev:db
+```
+
+- 仅起容器（不跑迁移）：`npm run docker:up`
+- 查看日志：`npm run docker:logs`
+- 停止并移除容器（**数据卷默认保留**，MySQL 数据仍在）：`npm run docker:down`
+
+**若首次 `docker compose up` 拉取 `mysql`/`redis` 镜像失败（连接 `registry-1.docker.io` 超时）**：打开 Docker Desktop → **Settings → Docker Engine**，在 JSON 中增加或合并 `registry-mirrors`（地址以你环境可用的镜像服务为准），例如：
+
+```json
+{
+  "registry-mirrors": ["https://docker.m.daocloud.io"]
+}
+```
+
+点击 **Apply & restart**，再在 `prototype` 目录执行 `docker compose pull` 或 `npm run docker:up`。
+
+Docker 内 MySQL `root` 密码为 **`123456`**（与 `server/.env.docker.example` 一致）。若你已有手写 `server/.env`，脚本不会覆盖；请自行保证 `DB_PASSWORD` 与 compose 中一致。
+
+### 升级 WSL（Docker 提示 *WSL needs updating* 时）
+
+Docker Desktop 使用 **WSL 2** 时，内核过旧会无法启动 Linux 引擎。请 **右键「以管理员身份运行」PowerShell**，执行：
+
+```powershell
+wsl --update
+```
+
+若微软商店受限或上述失败，可改为：
+
+```powershell
+wsl --update --web-download
+```
+
+完成后 **重启 Windows**，再打开 Docker Desktop。仍有问题时：先做 **Windows 更新**，并参阅 [安装 WSL](https://learn.microsoft.com/zh-cn/windows/wsl/install) 与 [手动安装步骤中的内核更新包](https://learn.microsoft.com/zh-cn/windows/wsl/install-manual#step-4---download-the-linux-kernel-update-package)。可用 `wsl -l -v` 查看发行版是否为 **VERSION 2**。
+
+### 安装 Docker Desktop（Windows）
+
+**若安装报 `C:\ProgramData\DockerDesktop must be owned by an elevated account`：** 请 **以管理员身份打开 PowerShell**，任选其一后重装 Docker Desktop（安装程序也务必「以管理员身份运行」）：
+
+```powershell
+# 方式 A：删除残留目录（无在用 Docker 时）
+Remove-Item -LiteralPath 'C:\ProgramData\DockerDesktop' -Recurse -Force -ErrorAction SilentlyContinue
+
+# 方式 B：不删目录，把所有权交给管理员组（方式 A 失败时再试）
+takeown /f 'C:\ProgramData\DockerDesktop' /r /d y 2>$null
+icacls 'C:\ProgramData\DockerDesktop' /grant Administrators:F /t 2>$null
+```
+
+1. **推荐（winget）**（需 Windows 10/11 且已装 [应用安装程序](https://aka.ms/getwinget)）：
+
+   ```powershell
+   winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements
+   ```
+
+   出现 **「是否允许此应用对你的设备进行更改？」** 时选 **是**；若安装程序还要求勾选组件，按默认完成即可。安装结束后建议 **注销或重启一次**，再打开 **开始菜单 → Docker Desktop**。
+
+2. **或官网安装**：打开 [Docker Desktop for Windows](https://www.docker.com/products/docker-desktop/) 下载安装包，同样需管理员权限；首次启动若提示启用 **WSL 2** 或安装 Linux 子系统，按向导执行（可能需重启）。
+
+3. **确认引擎已就绪**：任务栏鲸鱼图标为 **Running**（非 “Docker Desktop starting…”）。在 **新开** 的 PowerShell 中执行：
+
+   ```powershell
+   docker version
+   docker compose version
+   docker run --rm hello-world
+   ```
+
+   若仍提示找不到 `docker`：先完全退出并重新打开 Docker Desktop，或 **重启电脑**；仍不行则在「设置 → 应用 → Docker Desktop → 修复」或检查是否安装到默认路径 `C:\Program Files\Docker\Docker\`。
+
+### 与本项目联调
+
+1. **先打开 Docker Desktop**，等托盘图标为运行状态；在 PowerShell 执行 `docker info` 无报错再继续（若报 `docker_engine` / pipe 错误说明引擎未起）。
+2. **`docker` 命令找不到**：把 `C:\Program Files\Docker\Docker\resources\bin` 加入**用户**环境变量 `Path`，**关闭并重新打开**终端；或临时执行  
+   `$env:PATH = 'C:\Program Files\Docker\Docker\resources\bin;' + $env:PATH`  
+   （本仓库的 `npm run dev:db` 脚本在 Windows 上会尝试自动 prepend 该目录，但仍需 daemon 已运行。）
+3. `cd prototype\server` 执行 **`npm install`**（`npm run dev:db` 会调用其中的 `migrate`/`seed`）。
+4. `cd prototype` 执行 **`npm run dev:db`**。
+5. `cd prototype\server` 执行 **`npm start`**，浏览器访问 `http://127.0.0.1:实际端口/api/health`，应看到 `database: "connected"`、`db_product_count: 200`（首次 seed 成功后）。
+
+### 排错摘要
+
+| 现象 | 处理 |
+|------|------|
+| `docker` 不是内部或外部命令 | 安装完成后**新开终端**或重启；确认 Docker Desktop 已启动。 |
+| `Cannot connect to the Docker daemon` | 启动 Docker Desktop，等托盘图标就绪后再执行命令。 |
+| `port is already allocated`（3306/6379） | 关闭本机其它 MySQL/Redis，或改 `docker-compose.yml` 里 `ports` 左侧宿主机端口，并同步改 `server/.env` 中 `DB_PORT`/`REDIS_PORT`。 |
+| `npm run dev:db` 里 MySQL 一直不健康 | `docker compose logs mysql` 看报错；常见为首次拉镜像慢，多等 1～2 分钟再试。 |
+| WSL / 虚拟化相关报错 | BIOS 中开启 **虚拟化（Intel VT-x / AMD-V）**；Windows 功能中启用 **虚拟机平台**、**适用于 Linux 的 Windows 子系统**（Docker 文档有逐步说明）。 |
+| Docker 提示 **「WSL needs updating」/ WSL 版本过旧** | 见本文 **「本机 Docker → 升级 WSL」** 小节。 |
+| **winget** 报「安装程序失败」、退出码 **4294967291**（或类似） | 多为 **未在 UAC 弹窗点「是」**、关闭了安装向导，或 **非交互环境** 无法点按钮。请在本机 **以管理员打开 PowerShell** 再执行一次 `winget install …`，或直接运行官网下载的 `Docker Desktop Installer.exe` 完成图形界面安装。 |
+| 提示 **`C:\ProgramData\DockerDesktop must be owned by an elevated account`** | 该目录权限/所有者不对（常见于曾用非管理员安装或残留目录）。**以管理员打开 PowerShell**，执行下面「修复 ProgramData\DockerDesktop」中的命令后，再 **右键「以管理员身份运行」** 安装包或重新 `winget install`。 |
+| `docker compose up` 报 **`registry-1.docker.io` 超时 / failed to resolve / connectex`** | 本机访问 Docker Hub 失败（网络、IPv6、地区策略等）。在 **Docker Desktop → Settings → Docker Engine** 中为 `registry-mirrors` 配置可用镜像（以你单位/云厂商文档为准），**Apply & Restart** 后重试 `docker compose pull`；或换网络/VPN 后再拉取。 |
+| **`Access denied for user 'root'@'172.18.0.1' (using password: YES)`** 且 `.env` 里密码已与 `docker-compose.yml` 中 `MYSQL_ROOT_PASSWORD` 一致 | 数据卷 **`zhili_mysql_data` 在首次启动时已写入旧 root 密码**；之后只改 compose / `.env` 不会改库内密码。在 **`prototype` 目录**执行 **`npm run docker:mysql-fresh`**（会 **`docker compose down -v` 删除 MySQL 卷**，数据清空），再 **`npm run dev:db`** 重建表并种子；或保留数据时在容器内用旧密码登录后 `ALTER USER`。 |
+
 ## 启动（务必先 API，再前端）
 
 终端 1（API，默认从 3000 起占用；若被占用会自动顺延，并写入 `server/.listen-port`）：

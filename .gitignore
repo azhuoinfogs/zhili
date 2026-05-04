@@ -1,0 +1,5 @@
+# Cursor IDE（本地技能、计划、缓存等不入库）
+.cursor/
+
+# 本地数据库连接（含 Docker 一键脚本生成的 .env）
+prototype/server/.env

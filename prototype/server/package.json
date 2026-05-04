@@ -1,15 +1,21 @@
 {
-  "name": "zhili-validate-server",
+  "name": "zhili-mvp-server",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "node --test scoring.test.mjs"
+    "test": "node --test scoring.test.mjs",
+    "migrate": "node migrate.js",
+    "seed": "node seed.js",
+    "init-db": "node migrate.js && node seed.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "mysql2": "^3.9.7",
+    "redis": "^4.6.7",
+    "dotenv": "^16.4.5"
   }
 }

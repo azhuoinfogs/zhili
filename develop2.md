@@ -1,8 +1,8 @@
 # 知礼 · 整合开发计划（develop2）
 
-**版本**：v2.4  
-**更新**：2026-05-02  
-**状态**：待评审  
+**版本**：v2.6  
+**更新**：2026-05-04  
+**状态**：待评审（仓库已与 B0 + 本机 Docker 编排对齐，见篇首快照）  
 
 本文档在通读 **[develop1.md](develop1.md)**（送礼 AI / 知礼 MVP 完整开发说明 v2.0）全文基础上重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 细项对照长表**仍见 [develop.md](develop.md)。
 
@@ -20,10 +20,13 @@
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
 | **develop.md 阶段 A** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐 |
-| **develop1 MVP 后端** | **未开工** | MySQL / Redis / 微信登录 / 收藏 CRUD / 联盟转链 |
+| **develop1 MVP 后端** | **B0 已具备，B1+ 未开工** | **B0**（`prototype/server`）：`migrations/001_b0_schema.sql`；`npm run migrate` / `seed` / `init-db`；MySQL 连接池 + Redis 客户端（无 Redis 时降级）；`GET /api/health`（含 `db_product_count`）；**业务 API 仍以 `products.json` 为主**，MySQL `product` 表供 B3+ 读模型切换。**B1+**：微信登录、画像 CRUD、推荐网关、`/api/favorite*`、联盟转链等仍待开发 |
+| **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
-**本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`）。
+**本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`；**若用 Docker MySQL/Redis**，先在该 README 完成 compose 与 `npm run dev:db`，保证 `server/.env` 中 **`DB_PASSWORD` 与 `MYSQL_ROOT_PASSWORD` 一致**；改密后旧卷需 `docker:mysql-fresh` 或手动 `ALTER USER`）。
+
+**下一增量（与 §9.1 顺序一致）**：**B1** 微信登录 → **B2** 画像 CRUD →（**B9** 商品写接口可部分并行）→ **B3** 推荐内核对接 → **B4** 推荐网关 + Redis 缓存 → **B5**～**B8** → **B10** 联调硬化。
 
 ---
 
@@ -61,9 +64,9 @@
 |------|--------|----------|
 | H5 | 同快照表 | 多画像、微信登录、收藏列表持久化 |
 | API | 同快照表 | develop1 风格登录/画像/收藏/转链 REST |
-| 数据 | **200** 条商品 JSON；API 返回 `images[]` | 联盟字段、运营后台 |
+| 数据 | **200** 条商品 JSON；API 返回 `images[]`；**Docker 下可** `seed` 落 **`product` 表**与库表结构对齐 | 联盟字段、运营后台；**线上**仍以 develop1 数据层为准 |
 | 小程序 | 三页 + PRD 色顶栏 | WeUI 全量、登录、与 H5 同等交互、埋点全量 |
-| 后台 / 联盟 | — | develop1 §3.2、CPS、MySQL/Redis |
+| 后台 / 联盟 | — | develop1 §3.2、CPS；**本机** MySQL/Redis 已由 Docker 编排覆盖，**不等同**生产托管与联盟 |
 
 ---
 
@@ -129,52 +132,107 @@
 
 ---
 
-## 6. 数据库设计（develop1 §4 → MVP 目标态）
+## 6. develop1 MVP 后端 — 数据库与字段对齐
 
-上线建表草案以 **develop1.md 第 4 节 SQL** 为准，含：`user`、`user_profile`、`product`、`collection`、`event`。
+建表 **以 [develop1.md](develop1.md) §4 SQL 为权威**；以下为 **与 `prototype` 落地数据** 的映射与落库注意，避免直接拷 SQL 而不改类型。
 
-**与 prototype 映射**
+### 6.1 表级映射
 
-| develop1 | prototype 现阶段 |
-|------------|-------------------|
-| `product` 行 | `products.json` 单条；需补 **`images` 数组**、联盟字段 |
-| `event` 行 | `events.jsonl` 一行一 JSON；迁移时做字段映射 |
-| `user` / `user_profile` | 无；小程序登录后创建 |
+| develop1 表 | prototype 现状 | MVP 落库说明 |
+|---------------|------------------|--------------|
+| `user` | 匿名 `zhili_vid`（字符串） | 微信登录后写入 `openid`；可保留 `device_id`/`anon_id`  varchar 关联历史埋点 |
+| `user_profile` | 浏览器单次画像 JSON；**禁忌**在表单与 `personalized` body，develop1 表未单列 | 增加 `taboos` json 或 text[]，与 PRD / `scoring.js` 一致 |
+| `product` | `products.json` 行 | `id`→`product_id`；`title`→`name`；**`styles` 数组**→develop1 单 `style` enum：取主风格或拆成 `styles` json 改表 |
+| `collection` | 无持久化 | 新表 + `POST/DELETE /api/favorite*`（见 §7） |
+| `event` | `events.jsonl` 多字段 JSON | `event_type` ← `event`；`extra` ← 其余字段 JSON；`user_id` 登录后 FK，未登录可写 0 + `extra.zhili_vid` |
+
+### 6.2 枚举与中英文（develop1 SQL ↔ API）
+
+| develop1 / SQL 写法 | prototype / `personalized` body | 迁移策略 |
+|---------------------|-----------------------------------|----------|
+| `relation` 中文 enum | `relation`: `friend` / `partner` / … | 小程序或 ETL **对照表**双向转换 |
+| `age_range` `<18` 与 `18-25` | `under18`、`18-25` | 行级映射；勿混用 |
+| `circles` json | `interests: string[]` | 键名统一为 `circles` 存库或保留 `interests` 与文档约定 |
+| `budget_max` decimal | `budget`: `100-300` 等档位 | 二选一：**档位列**（与现算法一致）或 **max 元** + 网关换算入 `personalized` |
+| `gender` 男/女/通用 | `male` / `female` / `unknown` | 对照表 |
+| `product.style` 单枚举 | `styles[]` | 入库时写主风格；或改 product 为 `styles` json（推荐与 PRD 4.2 一致） |
+
+### 6.3 `product` 与 `products.json` 字段对照
+
+| develop1 `product` | `products.json` |
+|--------------------|-----------------|
+| `product_id` | `id` |
+| `name` | `title` |
+| `selling_point` | `sellPoint` |
+| `occasion_keyword` | `occasionKeyword` |
+| `images` json | 验证端 API 已返回 **`images`**；落库可原样存 |
+| `click_count` | 暂无 | MVP 可由埋点聚合或异步任务更新 |
 
 ---
 
-## 7. API 设计（develop1 §5）与 prototype 对照
+## 7. develop1 API 与验证端网关对齐
 
-develop1 规划 REST 如下（节选）；验证已实现列右侧。
+### 7.1 路径冲突（强制约定）
 
-| develop1 端点 | 方法 | 说明 | prototype 现状 |
-|-----------------|------|------|------------------|
-| `/api/user/login` | POST | 微信 code | **无** |
-| `/api/profile` | POST | 创建/更新画像 | 画像在客户端 + **`POST /api/personalized`** body |
-| `/api/profile/list` | GET | 画像列表 | **无** |
-| `/api/profile/current` | PUT | 默认画像 | **无** |
-| `/api/recommend` | GET | 分页推荐 | **`/api/hot`** / **`/api/personalized`**（无统一 recommend 名） |
-| `/api/product/:id` | GET | 详情 | **无**独立详情接口，商品在列表 JSON 内 |
-| `/api/collect` | POST/DELETE | 收藏 | **无**；仅有埋点 `collect` |
-| `/api/collect/list` | GET | 收藏列表 | **无** |
-| `/api/event` | POST | 上报 | **`POST /api/collect`** |
-| `/api/purchase/url` | GET | 转链 | **无** |
+| 路径 | develop1 原意 | `prototype/server` 实际 | MVP 约定 |
+|------|---------------|---------------------------|----------|
+| **`POST /api/collect`** | develop1 曾列为「添加收藏」 | **仅埋点**，JSON 与 [prototype-spec.md](prototype-spec.md) §5 | **埋点独占此路径**；业务收藏改用 **`/api/favorite`**（develop1 已改为该名，见 develop1 §5 修订） |
 
-MVP 实施时可：**保留** `/api/hot`·`/api/personalized` 为推荐内核，在其外包一层 develop1 风格网关（登录、画像 id、分页、收藏）。
+### 7.2 端点对照与实现方式
+
+| develop1 端点 | 说明 | 与 prototype 对齐方式 |
+|---------------|------|----------------------|
+| `POST /api/user/login` | `code` → `openid` | 新写；与推荐网关同服务或同域 |
+| `POST /api/profile` 等画像 CRUD | 持久化多画像 | Body 字段与 **`personalized` 画像段** 同名（英文键），便于复用 `scoring.js` |
+| `GET /api/recommend` | `page`、`size` | **`offset=(page-1)*size`，`limit=size`**；网关按 `user`+`zhili_group` 或业务规则选 **`GET /api/hot`** 或 **`POST /api/personalized`** |
+| `GET /api/product/:id` | 详情 | 可从 MySQL 读；或代理读静态 JSON + **与 `/api/related/:id` 同包部署** |
+| `POST/DELETE /api/favorite`、`GET /api/favorite/list` | 收藏 | **新实现**；与埋点分离 |
+| `POST /api/event` | 结构化事件表写入 | **可选**：与 `POST /api/collect` 二选一或双写（collect 兼容验证脚本） |
+| `GET /api/purchase/url` | 联盟转链 | 新写；`product` 表增 `affiliate_url` / PID 字段 |
+
+### 7.3 推荐内核复用（不必重写打分）
+
+网关层只负责：**鉴权** → **取当前 `profile_id` 与 shelf** → 调内部 **`/api/hot` 或 `/api/personalized`**（已实现分页、筛选、`images`、`/api/related`）→ 映射响应字段名（若小程序协议固定）。
 
 ---
 
-## 8. 推荐算法与缓存（develop1 §6）
+## 8. 推荐算法、理由与缓存（develop1 §6）
 
-- **得分公式**与 develop1 §6.1 子项表一致，与 PRD 4.3 及 **`scoring.js`** 对齐。  
-- **理由模板**：develop1 §6.2 与 PRD 4.4；实现以 **`buildReasonLines`** 为准（含禁忌因子等）。  
-- **Redis**（develop1 §6.3）：`recommend:{user_id}:{profile_id}:{filter_hash}`，TTL 10 分钟；改画像删缓存；故障降级热门（可与 `hotRank`/点击量对齐）。**prototype 无 Redis**。
+| develop1 条款 | 对齐说明 |
+|-----------------|----------|
+| **§6.1 得分子项** | 与 PRD 4.3 及 **`prototype/server/scoring.js`** 一致；MVP **移植 `computeScore`** 到 Nest 服务或 **子进程调用现模块**，避免两套公式 |
+| **§6.2 理由 copy** | develop1 示例为简版；线上以 **`buildReasonLines`**（PRD 4.4，含禁忌）为准，develop1 文案表可作运营参考 |
+| **§6.3 Redis** | Key：`recommend:{user_id}:{profile_id}:{filter_hash}`，`filter_hash` = 稳定序列化 `occasion|budget|style|group`（如 SHA256 前 12 位）；**TTL 600s**；**画像变更** `DEL recommend:{user_id}:*`；故障 **降级**：与 develop1 一致走 **`hotRank` 或 `click_count` 排序**（验证端热门逻辑已存在） |
+
+**prototype**：未起 Docker 时 **无 Redis 进程**（`db.js` 降级）；`prototype/docker-compose.yml` 可提供 **Redis 7** 供本机/B4 预演。无 `click_count` 实时写回，MVP 接上 `event` 表后可批处理更新 `product.click_count`。
 
 ---
 
 ## 9. 开发任务分解（develop1 §7）
 
 **前提**：验证通过且商品打标完成。develop1 表内人天合计 **38**（后端 14 + 前端 16 + 后台 4 + 测试部署 4）；日历仍可按 **约 4 周、2 人并行** 排期。
+
+### 9.1 MVP 后端任务分解（WBS，与 §6～§8 对齐）
+
+以下按 **可并行边界** 与 **依赖顺序** 拆项；人天仍汇总为下表 **14**（若 **`scoring.js` 整包复用** 且不做 Nest 内重写，可将「推荐打分」人天挪到联调/网关映射）。
+
+| 序号  | 任务包              | 内容要点                                                                                                                                                                                                       | 依赖           | 交付物                     |
+| --- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------------------- |
+| B0  | **工程与数据基座**      | Nest（或沿用 **Express 单体**，**当前仓库为后者**）；MySQL 连接池；迁移脚本；**§6 建表**（`user` / `user_profile` 含 `taboos` / `product` / `collection` / `event`）；**`products.json` → `product` 初始化**（字段对照 §6.3）；本地/测试 Redis（**`prototype/docker-compose.yml` + `npm run dev:db`**） | —            | 可执行迁移、种子数据、健康检查；**交付物路径**：`server/migrations/`、`server/migrate.js`、`server/seed.js`、`server/db.js`、`prototype/README.md`（Docker）、`prototype/scripts/docker-dev-up.mjs`         |
+| B1  | **微信登录**         | `POST /api/user/login`：`code`2Session → `openid` 落 `user`；JWT 或 session；与小程序 `app.login` 约定                                                                                                                | B0           | 登录接口 + 鉴权中间件            |
+| B2  | **画像 CRUD**      | `POST/GET/PUT` develop1 §5 画像系列；Body **英文键与 `personalized` 一致**（§7.2）；**中英文 enum 对照**在写入/读出层统一（§6.2）                                                                                                       | B1           | Swagger/契约 + 单测         |
+| B3  | **推荐内核对接**       | **不重写公式**：移植或子进程/同仓引用 **`computeScore` / `buildReasonLines`**（§8）；内部仍调 **`GET /api/hot`** / **`POST /api/personalized`**（offset/limit）；或把现 Express 路由打成子应用挂载                                               | B0、B2（需默认画像） | 与验证端一致的分页与列表字段          |
+| B4  | **推荐网关 + Redis** | `GET /api/recommend`：`page`/`size` → **offset/limit**（§7.2）；**§8.3** 缓存 key、TTL、画像变更失效、故障降级热门                                                                                                              | B3、B0（Redis） | P90 目标可测                |
+| B5  | **商品读模型**        | `GET /api/product/:id`；可选代理 **`/api/related/:id`**；与小程序详情协议对齐                                                                                                                                              | B0           | 详情 JSON 含 `images`、理由字段 |
+| B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                 | B1           | 收藏幂等与列表分页               |
+| B7  | **埋点入库（可选）**     | `POST /api/event` 写 `event`；或与验证端 **`POST /api/collect` 双写**、网关转发；匿名 `zhili_vid` 进 `extra`（§6.1）                                                                                                           | B0、B1（可选）    | 与 CSV/分析脚本字段可对齐         |
+| B8  | **联盟转链**         | `GET /api/purchase/url`；`product` 联盟字段；超时重试≤2、结果缓存（§13）                                                                                                                                                    | B0           | 可跳转真实/沙箱链接              |
+| B9  | **商品写接口（极简后台）**  | develop1 后台依赖的 **商品 CRUD API**；权限与运营账号（可与 B1 分角色）                                                                                                                                                          | B0、B1        | 后台可录入/改价签               |
+| B10 | **联调与硬化**        | 与小程序端对 **鉴权头、错误码、分页、空列表**；压测推荐 P90；Redis 降级演练                                                                                                                                                              | B1～B9 主链     | 联调清单关闭、§11.2 后端相关项达标    |
+
+**建议顺序**：B0 → B1 →（B2 ∥ B9 部分读可先）→ B3 → B4 → B5 → B6 → B8；B7 视是否保留 H5 同源埋点再排；B10 贯穿收尾。
+
+**与 develop1 原 14 人天行的映射**：「数据库」≈ B0；「登录」≈ B1；「画像」≈ B2；「推荐打分」≈ B3（复用则减）；「Redis」≈ B4 一部分；「推荐 API」≈ B4 网关层；「商品 CRUD」≈ B9；「联盟」≈ B8；「收藏与事件」≈ B6 + B7。
 
 | 模块 | 任务 | 人天 | 负责人 |
 |------|------|------|--------|
@@ -186,7 +244,7 @@ MVP 实施时可：**保留** `/api/hot`·`/api/personalized` 为推荐内核，
 | 后端 | 推荐 API 开发 | 2 | 后端 |
 | 后端 | 商品 CRUD API | 1 | 后端 |
 | 后端 | 电商联盟对接 | 2 | 后端 |
-| 后端 | 收藏 API & 事件 API | 2 | 后端 |
+| 后端 | 收藏（`/api/favorite*`）与可选 `POST /api/event` | 2 | 后端 |
 | **后端合计** | | **14** | |
 | 前端 | 小程序搭建、登录页 | 1 | 前端 |
 | 前端 | 画像创建/编辑 | 3 | 前端 |
@@ -295,4 +353,4 @@ MVP 实施时可：**保留** `/api/hot`·`/api/personalized` 为推荐内核，
 
 [prd_v0.md](prd_v0.md) · [plan0.md](plan0.md) · [prototype-spec.md](prototype-spec.md) · [develop.md](develop.md) · [develop1.md](develop1.md) · [prototype/README.md](prototype/README.md)
 
-**维护约定**：**代码或数据有发布级变更时**，先更新本文 **「当前开发状态」** 与 [prototype-spec.md](prototype-spec.md) 同步段，再视情况改 develop1 勘误表。develop1 增删章节后，同步本文 **§1 勘误、§7 映射、§9 人天表**；PRD 逐项矩阵仍以 **develop.md** 为主表。
+**维护约定**：**代码或数据有发布级变更时**，先更新本文 **「当前开发状态」** 与 [prototype-spec.md](prototype-spec.md) 同步段，再视情况改 develop1 勘误表。develop1 增删章节后，同步本文 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**；PRD 逐项矩阵仍以 **develop.md** 为主表。

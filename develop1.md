@@ -4,6 +4,8 @@
 编写者: 产品经理 & 技术负责人
 状态: 待评审
 
+**与验证端 / MVP 实施对齐**：库表、枚举中英、网关与埋点路径的**执行细则**见 **[develop2.md](develop2.md) §6～§8**（含本文 `§5 /api/collect` 与验证端埋点 **同名冲突** 的强制约定）。
+
 目录
 0. 前置验证：前端最小页面验证
 
@@ -198,10 +200,10 @@ CREATE TABLE `event` (
 /api/profile/current	PUT	设置当前默认画像	{ user_id, profile_id }
 /api/recommend	GET	获取推荐列表（已排序）	?user_id=123&profile_id=1&occasion=birthday&budget=300-500&page=1&size=20
 /api/product/:product_id	GET	商品详情	-
-/api/collect	POST	添加收藏	{ user_id, product_id }
-/api/collect	DELETE	取消收藏	{ user_id, product_id }
-/api/collect/list	GET	获取收藏列表	?user_id=123
-/api/event	POST	上报事件	{ user_id, event_type, product_id, extra }
+/api/favorite	POST	添加收藏（**勿占用 `/api/collect`**：验证端已用该路径作埋点）	{ user_id, product_id }
+/api/favorite	DELETE	取消收藏	同上 body 或 query
+/api/favorite/list	GET	收藏列表	?user_id=123
+/api/event	POST	上报事件（可与验证端 `POST /api/collect` 并存，由网关转发或统一进 event 表）	{ user_id, event_type, product_id, extra }
 /api/purchase/url	GET	获取电商跳转链接	?product_id=p_1001
 6. 推荐算法（v1.0）
 6.1 得分公式

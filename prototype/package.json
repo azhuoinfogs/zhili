@@ -4,6 +4,11 @@
   "version": "0.1.0",
   "description": "知礼最小验证：H5 + API + 分析脚本",
   "scripts": {
-    "gen:products": "node scripts/generate-products.mjs 120"
+    "gen:products": "node scripts/generate-products.mjs 120",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:mysql-fresh": "docker compose down -v && docker compose up -d",
+    "docker:logs": "docker compose logs -f",
+    "dev:db": "node scripts/docker-dev-up.mjs"
   }
 }

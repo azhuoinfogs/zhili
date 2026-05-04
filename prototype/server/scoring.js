@@ -56,7 +56,7 @@ function situationScore(profile, product) {
 
 function genderSub(userGender, productGender) {
   if (!userGender || userGender === 'unknown') return 3;
-  if (productGender === 'any' || productGender === userGender) return 4;
+  if (productGender === 'any' || productGender === 'unknown' || productGender === userGender) return 4;
   return 0;
 }
 

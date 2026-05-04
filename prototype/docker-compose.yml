@@ -1,0 +1,40 @@
+# 本机开发：MySQL 8 + Redis 7（与 prototype/server/.env.docker.example 默认密码一致）
+# 在 prototype 目录执行：docker compose up -d
+# 或：npm run dev:db（含建表与种子）
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: zhili-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: zhili_mvp
+    ports:
+      - "3306:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - zhili_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p123456"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 25s
+
+  redis:
+    image: redis:7-alpine
+    container_name: zhili-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  zhili_mysql_data:
