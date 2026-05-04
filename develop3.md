@@ -61,8 +61,8 @@
 | **B0 工程基座**    | ✅ 已完成          | `db.js`、`migrate.js`、`seed.js`、`docker-compose.yml`                 |
 | **B1 微信登录**    | ✅ 已完成          | `routes/user.js`、`lib/jwt.js`、`middleware/requireAuth.js`           |
 | **B2 画像 CRUD** | ✅ 已完成          | `routes/profile.js`、`lib/profileSchema.js`、`profile.test.mjs`       |
-| **B3 推荐内核**    | ⚠️ 主路径完成，余量待收尾 | `lib/recommendCore.js`、`routes/user.js`                             |
-| **B4 推荐网关**    | ⚠️ 主路径完成，余量待收尾 | `routes/recommend.js`、`lib/recommendCache.js`                       |
+| **B3 推荐内核**    | ✅ 已完成          | `lib/recommendCore.js`（含 related 相关推荐逻辑）                            |
+| **B4 推荐网关**    | ✅ 已完成          | `routes/recommend.js`、`lib/recommendCache.js`、`middleware/rateLimit.js` |
 | **B5 商品详情**    | ✅ 已完成          | `routes/product.js`、`lib/productResolve.js`、`lib/productCatalog.js` |
 | **B6 收藏业务**    | ✅ 已完成          | `routes/favorite.js`、`lib/favoriteHelpers.js`                       |
 | **B7 埋点入库**    | ✅ 已完成          | `routes/event.js`、`lib/eventDualWrite.js`                           |
@@ -79,23 +79,19 @@
 
 #### **📱 Weixin 小程序** (`prototype/mp-weixin/`)
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| 页面框架 | ✅ 已完成 | `landing`→`tags`→`browse`→`detail` 四页流 |
-| 画像页面 | ✅ 已完成 | 与 H5 字段一致 |
-| 推荐列表 | ✅ 已完成 | 双列、筛选、下拉刷新、触底分页 |
-| 商品详情 | ✅ 已完成 | 多图轮播、理由卡片、横滑相关推荐 |
-| 微信登录 | ❌ 待完成 | `wx.login` → `/api/user/login` |
-| 收藏持久化 | ❌ 待完成 | `/api/favorite*` 接入 |
+| 模块    | 状态    | 说明                                     |
+| ----- | ----- | -------------------------------------- |
+| 页面框架  | ✅ 已完成 | `landing`→`tags`→`browse`→`detail` 四页流 |
+| 画像页面  | ✅ 已完成 | 与 H5 字段一致                              |
+| 推荐列表  | ✅ 已完成 | 双列、筛选、下拉刷新、触底分页                        |
+| 商品详情  | ✅ 已完成 | 多图轮播、理由卡片、横滑相关推荐                       |
+| 微信登录  | ❌ 待完成 | `wx.login` → `/api/user/login`         |
+| 收藏持久化 | ❌ 待完成 | `/api/favorite*` 接入                    |
 
 ### 1.3 待完成任务（按模块分类）
 
 | 模块 | 任务 | 优先级 | 预估人天 | 依赖 |
 |------|------|--------|----------|------|
-| **Server** | B3.4 `/api/related` 迁入模块 | 中 | 0.5 | B3.1-B3.3 |
-| **Server** | B4.8 限流 | 中 | 0.5 | B4.5 |
-| **Server** | B4.9 观测与日志 | 中 | 0.5 | B4.4 |
-| **Server** | B4.11 性能验收（P90） | 高 | 1 | B4.10 |
 | **Server** | B8 联盟转链 | 高 | 2 | B0、B9 |
 | **Weixin** | 微信登录接入 | 高 | 1 | B1 |
 | **Weixin** | 收藏持久化接入 | 高 | 1 | B6 |

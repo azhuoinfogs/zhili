@@ -1,7 +1,31 @@
 /**
  * B3：推荐内核与 hot/personalized 共用逻辑（单一事实源，供 index 与需登录的 feed 复用）
+ * 包含：热门列表、个性化推荐、相关商品推荐
  */
 import { computeScore, buildReasonLines } from '../scoring.js';
+
+/**
+ * 计算两个商品的相似度分数
+ * @param {Record<string, unknown>} a 基准商品
+ * @param {Record<string, unknown>} b 对比商品
+ */
+export function overlapScore(a, b) {
+  let s = 0;
+  const oa = new Set(a.occasions || []);
+  for (const o of b.occasions || []) {
+    if (oa.has(o)) s += 3;
+  }
+  const ia = new Set(a.interests || []);
+  for (const i of b.interests || []) {
+    if (ia.has(i)) s += 2;
+  }
+  const sa = new Set(a.styles || []);
+  for (const st of b.styles || []) {
+    if (sa.has(st)) s += 2;
+  }
+  s += (300 - Math.min(b.hotRank ?? 300, 300)) * 0.01;
+  return s;
+}
 
 export const BUDGET_RANGE = {
   lt100: [0, 100],
@@ -162,4 +186,20 @@ export function runPersonalizedList(products, profile, shelf, offset, limit) {
   }
 
   return rows.slice(offset, offset + limit).map((x) => x.item);
+}
+
+/**
+ * B3.4：相关商品推荐（原 relatedCore.js 逻辑迁移至此）
+ * @param {unknown[]} productsData 全量列表
+ * @param {Record<string, unknown>} selfKernel 基准商品
+ * @param {Record<string, unknown> | null} profile 画像
+ */
+export function runRelatedList(productsData, selfKernel, profile) {
+  const id = selfKernel.id;
+  return productsData
+    .filter((p) => p.id !== id)
+    .map((p) => ({ p, s: overlapScore(selfKernel, p) }))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 8)
+    .map((x) => enrich(x.p, profile));
 }

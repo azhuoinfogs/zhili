@@ -185,6 +185,7 @@
   },
   "active": "9477fb9291d28cc7",
   "lastOpenFiles": [
+    "prototype/server/middleware/rateLimit.js",
     "prd_v0.md",
     "develop3.md",
     "develop2.md",
@@ -221,7 +222,6 @@
     "prototype/admin/node_modules/@babel/parser/README.md",
     "prototype/admin/node_modules/@babel/parser/CHANGELOG.md",
     "prototype/admin/node_modules/@babel/helper-validator-identifier/README.md",
-    "prototype/admin/node_modules/@babel/helper-string-parser/README.md",
-    "prototype/admin/node_modules/@jridgewell/sourcemap-codec/README.md"
+    "prototype/admin/node_modules/@babel/helper-string-parser/README.md"
   ]
 }

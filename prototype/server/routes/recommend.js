@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getPool, query, getRedis } from '../db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { rateLimit } from '../middleware/rateLimit.js';
 import { rowToApiProfile } from '../lib/profileSchema.js';
 import { productsData } from '../productsData.js';
 import {
@@ -35,20 +36,27 @@ function parseProfileIdQuery(q) {
   return id;
 }
 
-router.get('/', requireAuth, async (req, res) => {
-  if (!getPool()) {
-    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
-    return;
-  }
+router.get('/', requireAuth, rateLimit, async (req, res) => {
+  const startTime = Date.now();
   const q = req.query || {};
   const { page, size, offset, limit } = parsePageSize(q);
   const shelf = shelfFromQuery(q);
   const group = q.zhili_group ?? q.group ?? 'B';
   const mode = pickHotOrPersonalized(group);
   const wantId = parseProfileIdQuery(q);
+  
+  let cacheHit = false;
+  let dbQueryTime = 0;
+  let computeTime = 0;
+
+  if (!getPool()) {
+    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
 
   try {
     let rows;
+    const dbStart = Date.now();
     if (wantId != null) {
       rows = await query(
         `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
@@ -70,6 +78,7 @@ router.get('/', requireAuth, async (req, res) => {
         return;
       }
     }
+    dbQueryTime = Date.now() - dbStart;
 
     const profileRow = rows[0];
     const profileId = Number(profileRow.id);
@@ -80,7 +89,12 @@ router.get('/', requireAuth, async (req, res) => {
       try {
         const cached = await redis.get(cacheKey);
         if (cached) {
+          cacheHit = true;
           const body = JSON.parse(cached);
+          const elapsed = Date.now() - startTime;
+          console.log(`[知礼推荐] HIT | user=${req.userId} | mode=${mode} | elapsed=${elapsed}ms`);
+          res.setHeader('X-Cache', 'HIT');
+          res.setHeader('X-Response-Time', elapsed);
           return res.json(body);
         }
       } catch (e) {
@@ -88,6 +102,7 @@ router.get('/', requireAuth, async (req, res) => {
       }
     }
 
+    const computeStart = Date.now();
     const productPool = await getListedProductPool(productsData);
     let list;
     if (mode === 'hot') {
@@ -97,6 +112,7 @@ router.get('/', requireAuth, async (req, res) => {
       const profile = apiProfileToScoringProfile(api);
       list = runPersonalizedList(productPool, profile, shelf, offset, limit);
     }
+    computeTime = Date.now() - computeStart;
 
     const body = { list, page, size, mode };
 
@@ -108,8 +124,14 @@ router.get('/', requireAuth, async (req, res) => {
       }
     }
 
+    const elapsed = Date.now() - startTime;
+    console.log(`[知礼推荐] MISS | user=${req.userId} | mode=${mode} | elapsed=${elapsed}ms | db=${dbQueryTime}ms | compute=${computeTime}ms`);
+    res.setHeader('X-Cache', 'MISS');
+    res.setHeader('X-Response-Time', elapsed);
     res.json(body);
   } catch (e) {
+    const elapsed = Date.now() - startTime;
+    console.error(`[知礼推荐] ERROR | user=${req.userId} | elapsed=${elapsed}ms | error=${e.message}`);
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }
 });

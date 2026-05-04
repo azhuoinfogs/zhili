@@ -19,7 +19,6 @@ import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
 import { getListedProductPool } from './lib/productCatalog.js';
-import { relatedProductCards } from './lib/relatedCore.js';
 import { parseProfileFromQuery } from './routes/product.js';
 import {
   parsePaging,
@@ -27,6 +26,7 @@ import {
   runHotList,
   runPersonalizedList,
   parsePagingFromBody,
+  runRelatedList,
 } from './lib/recommendCore.js';
 import { wechatAuthConfigured } from './lib/wechat.js';
 import { jwtConfigured } from './lib/jwt.js';
@@ -124,7 +124,7 @@ app.get('/api/related/:id', async (req, res) => {
     }
     const profile = parseProfileFromQuery(req.query);
     const pool = await getListedProductPool(productsData);
-    res.json(relatedProductCards(pool, resolved.product, profile));
+    res.json(runRelatedList(pool, resolved.product, profile));
   } catch (e) {
     console.error('[知礼] /api/related 失败:', e.message);
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
