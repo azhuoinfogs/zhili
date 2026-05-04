@@ -10,6 +10,8 @@ import profileRouter from './routes/profile.js';
 import recommendRouter from './routes/recommend.js';
 import productRouter from './routes/product.js';
 import favoriteRouter from './routes/favorite.js';
+import eventRouter from './routes/event.js';
+import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
 import { relatedProductCards } from './lib/relatedCore.js';
@@ -68,6 +70,7 @@ app.use('/api/profile', profileRouter);
 app.use('/api/recommend', recommendRouter);
 app.use('/api/product', productRouter);
 app.use('/api/favorite', favoriteRouter);
+app.use('/api/event', eventRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
@@ -119,25 +122,32 @@ function csvEscape(v) {
   return s;
 }
 
-app.post('/api/collect', (req, res) => {
+app.post('/api/collect', async (req, res) => {
   const body = { ...req.body, serverTs: Date.now() };
   const line = JSON.stringify(body) + '\n';
-  fs.appendFile(logFile, line, () => {});
-  ensureCsvHeader();
-  const pj = JSON.stringify(body);
-  const row =
-    [
-      csvEscape(body.serverTs),
-      csvEscape(body.event),
-      csvEscape(body.user_id),
-      csvEscape(body.group),
-      csvEscape(body.page_name),
-      csvEscape(body.timestamp),
-      csvEscape(body.product_id),
-      csvEscape(body.position),
-      csvEscape(pj)
-    ].join(',') + '\n';
-  fs.appendFile(csvFile, row, () => {});
+  try {
+    await fs.promises.appendFile(logFile, line);
+    ensureCsvHeader();
+    const pj = JSON.stringify(body);
+    const row =
+      [
+        csvEscape(body.serverTs),
+        csvEscape(body.event),
+        csvEscape(body.user_id),
+        csvEscape(body.group),
+        csvEscape(body.page_name),
+        csvEscape(body.timestamp),
+        csvEscape(body.product_id),
+        csvEscape(body.position),
+        csvEscape(pj)
+      ].join(',') + '\n';
+    await fs.promises.appendFile(csvFile, row);
+  } catch (e) {
+    console.error('[知礼] collect 落盘失败:', e.message);
+    res.status(500).json({ error: 'SERVER_ERROR', message: '埋点落盘失败' });
+    return;
+  }
+  await tryDualWriteCollectToEvent(body);
   res.json({ ok: true });
 });
 

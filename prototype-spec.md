@@ -45,7 +45,8 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 | `GET` | `/api/hot` | 对照组；Query：`occasion`、`budget`、`style`；**`offset`（默认 0）、`limit`（默认 20，最大 50）** 分页 |
 | `POST` | `/api/personalized` | 实验组；Body：画像字段 + `shelf` + **`offset` / `limit`**（同上） |
 | `GET` | `/api/related/:id` | 类似推荐；Query：可选 **`profile`**（JSON 字符串，与 `personalized` 画像一致时理由更准） |
-| `POST` | `/api/collect` | 埋点上报（JSON 单行事件） |
+| `POST` | `/api/collect` | 埋点上报（JSON 单行事件）；可选 **`EVENT_DB_DUAL_WRITE=1`** 同步写 MySQL **`event`** |
+| `POST` | `/api/event` | **B7**：同上 Body 写入 **`event`**；**可选 Bearer**（登录则 `event.user_id` 为 JWT）；需 MySQL |
 | `GET` | `/api/export/events.csv` | 导出事件 |
 | `GET` | `/api/profile` | **B2** 画像列表；`offset`/`limit`；**Bearer** |
 | `POST` | `/api/profile` | **B2** 创建画像；Body 与 **`personalized` 画像段** 一致；**Bearer** |
@@ -81,7 +82,7 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 | `collect` | 收藏 | `product_id` |
 | `purchase_click` | 去购买 | `product_id` |
 
-持久化：`prototype/server/data/events.jsonl`（每行一条 JSON）。
+持久化：`prototype/server/data/events.jsonl`（每行一条 JSON）；若启用 **`EVENT_DB_DUAL_WRITE`** 或客户端调用 **`POST /api/event`**，另写入 MySQL **`event`** 表（见 [api.md](../api.md) **§4.2.5**）。
 
 ---
 

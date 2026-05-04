@@ -179,6 +179,17 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 **自测**：Login 取 token → **`POST /api/favorite`**（`p001`）→ **`GET /api/favorite/list`** → **`DELETE /api/favorite/p001`**（204）→ 再 DELETE 应 **404**。
 
+## B7 埋点入库（`POST /api/event` + 可选 `collect` 双写）
+
+与 **`POST /api/collect`** 使用 **相同 Body 形状**（至少含 **`event`**）；**`user_id` 列仅来自 JWT**，匿名设备的 **`user_id` 字符串** 落在 **`extra`**。详见 **[api.md](../api.md) §4.2.5**。
+
+| 配置 / 接口 | 说明 |
+|-------------|------|
+| **`POST /api/event`** | 需 MySQL；**201** `{ id, ok: true }`；**可选 Bearer** |
+| **`EVENT_DB_DUAL_WRITE=1`** | **`POST /api/collect`** 在 jsonl/csv 成功后 **尝试写 `event`**；失败仅打日志，响应仍为 **`{ ok: true }`** |
+
+**自测**：`npm run dev:db` + migrate → **`POST /api/event`**（Body 与 §10.6 `collect` 示例一致）→ MySQL `SELECT * FROM event ORDER BY id DESC LIMIT 1;`。再设 **`EVENT_DB_DUAL_WRITE=1`** 发 **`collect`**，应新增 **`event` 行**。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell

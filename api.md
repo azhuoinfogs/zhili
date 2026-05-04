@@ -13,13 +13,13 @@
 | **前缀** | 除导出 CSV 外，业务接口均在 **`/api`** 下 |
 | **JSON** | `Content-Type: application/json`；请求体上限约 **256KB** |
 | **CORS** | 开发态已开启，跨域按部署环境自行收紧 |
-| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`**、**`/api/profile*`**、**`/api/favorite*`** 要求 **`Authorization: Bearer <JWT>`**；**`GET /api/product/:id`** 为 **可选 Bearer**（见 **§4.2.3**）；`hot`/`personalized`/`collect` 等仍可不登录 |
+| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`**、**`/api/profile*`**、**`/api/favorite*`** 要求 **`Authorization: Bearer <JWT>`**；**`GET /api/product/:id`**、**`POST /api/event`** 为 **可选 Bearer**（见 **§4.2.3**、**§4.2.5**）；`hot`/`personalized`/`collect` 等仍可不登录 |
 
 ### 1.1 重要：埋点与收藏路径（develop2 §7.1）
 
 | 路径 | 用途 |
 |------|------|
-| **`POST /api/collect`** | **仅埋点**上报，写入 `events.jsonl` / 同步 CSV |
+| **`POST /api/collect`** | **仅埋点**上报，写入 `events.jsonl` / 同步 CSV；若环境变量 **`EVENT_DB_DUAL_WRITE=1`** 且 MySQL 可用，在落盘成功后 **额外 `INSERT` 到 `event` 表**（失败**不**影响 **`{ ok: true }`**，见 **§4.2.5**） |
 | **业务收藏** | **`POST /api/favorite`**、**`DELETE /api/favorite/:productId`**、**`GET /api/favorite/list`**（**B6**，见 **§4.2.4**）；**禁止**占用 `/api/collect` |
 
 ---
@@ -37,7 +37,8 @@
 | `GET` | `/api/hot` | 对照组热门列表 + 顶筛 + 分页 |
 | `POST` | `/api/personalized` | 实验组个性化列表 + 顶筛 + 分页 |
 | `GET` | `/api/related/:id` | 类似推荐（最多 8 条） |
-| `POST` | `/api/collect` | 埋点上报 |
+| `POST` | `/api/collect` | 埋点上报（jsonl/csv）；可选 **`EVENT_DB_DUAL_WRITE`** 双写 **`event`** |
+| `POST` | `/api/event` | **B7**：埋点写入 MySQL **`event`**；**可选 Bearer**；与 **`collect` Body 同形**（见 **§4.2.5**） |
 | `GET` | `/api/export/events.csv` | 导出埋点 CSV |
 | `GET` | `/api/profile` | **B2** 画像列表；Query **`offset`/`limit`**（默认 20、最大 50）；Bearer |
 | `POST` | `/api/profile` | **B2** 创建画像；Body 与 **`personalized` 画像段** 一致（见 **§4.3**）；Bearer |
@@ -286,6 +287,35 @@
 
 实现：**`routes/favorite.js`**；**`lib/favoriteHelpers.js`**（分页与 id 解析）。
 
+### 4.2.5 `POST /api/event`（B7 · 埋点入库）
+
+**说明**：将单次埋点写入 MySQL **`event`** 表（develop2 **§9.8**）。**`user_id` 列仅来自合法 JWT `sub`**；Body 里的 **`user_id`（常为匿名 `zhili_vid`）** 进入 **`extra` JSON**，**不作为**外键写入。
+
+**鉴权**：**可选 `Authorization: Bearer`**（**`middleware/optionalAuth.js`**）。有合法 token 则 **`event.user_id`** 填数字；无则 **`NULL`**（匿名）。
+
+**请求体**：与 **`POST /api/collect`** 一致，至少含：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `event` | 是 | **`page_view`** / **`form_submit`** / **`impression`** / **`click`** / **`collect`** / **`purchase_click`** / **`pull_refresh`** / **`explore_click`** |
+| `product_id` | 否 | 须匹配 **`^[a-zA-Z0-9_-]{1,32}$`**，非法 → **400** |
+| `page_name` | 否 | 最长 **64** 字符（超长截断） |
+| `position` | 否 | 整数 |
+| 其余 | 否 | 写入 **`extra`**（**`token`/`openid`/`code`/`session_key`** 等敏感键会被剥离） |
+
+**成功 `201`**：`{ "id": <insertId>, "ok": true }`。
+
+| HTTP | `error` | 说明 |
+|------|---------|------|
+| **400** | `BAD_REQUEST` | 缺 **`event`**、未知 **`event`**、非法 **`product_id`** |
+| **401** | `UNAUTHORIZED` | 带了 Bearer 但 JWT 无效 |
+| **503** | `DB_UNAVAILABLE` | 无数据库连接 |
+| **500** | `SERVER_ERROR` | `INSERT` 失败 |
+
+**`POST /api/collect` 与 `event` 表（模式 B）**：设置 **`EVENT_DB_DUAL_WRITE=1`** 后，`collect` 在 **jsonl + csv 均写入成功** 之后尝试 **`INSERT`**；校验失败或 DB 异常仅 **`console.warn`**，响应仍为 **`{ ok: true }`**。
+
+实现：**`routes/event.js`**；**`lib/eventPayload.js`**、**`lib/eventDb.js`**、**`lib/eventDualWrite.js`**。
+
 ### 4.3 B2 画像 CRUD（`/api/profile*`）
 
 **鉴权**：全部 **`Authorization: Bearer <token>`**；**`user_id` 仅来自 JWT**，Body 勿传 `user_id`。
@@ -415,14 +445,13 @@
 
 ## 8. 规划中接口（仍待实现）
 
-下表为 **尚未** 在验证端落地的端点；**B5** **`GET /api/product/:id`** 见 **§2**、**§4.2.3**；**B6** **`/api/favorite*`** 见 **§2**、**§4.2.4**（[develop2.md](develop2.md) **§9.7**）。
+下表为 **尚未** 在验证端落地的端点；**B5～B7** 已实现，见 **§2**、**§4.2.3～§4.2.5**（[develop2.md](develop2.md) **§9.6～§9.8**）。
 
 ### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
 | `GET /api/purchase/url` | **B8** 联盟转链 |
-| `POST /api/event` | **B7** 可选入库 |
 | 商品 CRUD | **B9** 极简后台 |
 
 ---
@@ -431,7 +460,11 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`**、**`/api/favorite`** |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`**、**`/api/favorite`**、**`/api/event`**；**`collect`** 可选双写 |
+| `prototype/server/routes/event.js` | **B7**：**`POST /api/event`** |
+| `prototype/server/lib/eventPayload.js` | **B7**：校验 **`event`**、组装 **`extra`** |
+| `prototype/server/lib/eventDb.js` | **B7**：**`INSERT INTO event`** |
+| `prototype/server/lib/eventDualWrite.js` | **B7**：**`EVENT_DB_DUAL_WRITE`** 下 **`collect`→`event`** |
 | `prototype/server/routes/favorite.js` | **B6**：**`POST/DELETE /api/favorite`**、**`GET /api/favorite/list`** |
 | `prototype/server/lib/favoriteHelpers.js` | **B6**：分页、**`productId`** 解析、列表项映射 |
 | `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4/**B5** 复用） |
@@ -455,7 +488,7 @@
 
 ---
 
-## 10. Postman 验证（B1、B2、B6 与其余 API）
+## 10. Postman 验证（B1、B2、B6、B7 与其余 API）
 
 ### 10.1 前置条件
 
@@ -464,7 +497,8 @@
 3. **本地登录（无微信密钥）**：在 **`prototype/server/.env`** 中设置 **`WECHAT_MOCK=1`**，否则 `POST /api/user/login` 会返回 **`WECHAT_NOT_CONFIGURED`**（503）。  
 4. **可选**：设置 **`JWT_SECRET`** 为随机长串，便于 `GET /api/health` 里 **`jwt_strong_secret`** 为 `true`（与生产习惯一致）。  
 5. **Redis（B4 / B5 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`**、**`GET /api/product/:id`** 仍 **200**，只是无缓存命中。  
-6. **B6 收藏**：需在 **`prototype/server`** 执行 **`npm run seed`**（或等价写入 **`product`** 表），否则 **`POST /api/favorite`** 对 **`p001`** 等会 **404** `NOT_FOUND`。
+6. **B6 收藏**：需在 **`prototype/server`** 执行 **`npm run seed`**（或等价写入 **`product`** 表），否则 **`POST /api/favorite`** 对 **`p001`** 等会 **404** `NOT_FOUND`。  
+7. **B7 埋点入库**：**`POST /api/event`** 需 MySQL；**`POST /api/collect` 双写** 另需 **`EVENT_DB_DUAL_WRITE=1`**（写入 **`server/.env`** 后重启 `npm start`）。
 
 ### 10.2 Postman 环境变量
 
@@ -499,7 +533,8 @@
 | 4 | `GET` | `{{base_url}}/api/hot?occasion=birthday&budget=100-300&style=practical&offset=0&limit=5` | 无 |
 | 5 | `POST` | `{{base_url}}/api/personalized` | Body **raw JSON**，见 §10.4 |
 | 6 | `GET` | `{{base_url}}/api/related/p001` | 无；或加 Query **`profile`**（JSON 字符串，见 §10.5） |
-| 7 | `POST` | `{{base_url}}/api/collect` | Body **raw JSON**，见 §10.6 |
+| 7 | `POST` | `{{base_url}}/api/collect` | Body **raw JSON**，见 §10.6；设 **`EVENT_DB_DUAL_WRITE=1`** 时另写 **`event`** |
+| 7b | `POST` | `{{base_url}}/api/event` | **B7**；Body 与 §10.6 类似，须含合法 **`event`**；无 Auth 或 **Bearer**；**201** |
 | 8 | `GET` | `{{base_url}}/api/export/events.csv` | 无；**Send and Download** 便于存文件 |
 
 **Login 的 Body 示例**（mock）：
@@ -566,8 +601,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）**、**`/api/favorite*`（B6）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。**B6** 需 **`npm run seed`** 后 **`product`** 表含目标 **`product_id`**。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）**、**`/api/favorite*`（B6）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。**B6** 需 **`npm run seed`** 后 **`product`** 表含目标 **`product_id`**。**B7** 含 **`POST /api/event`**（集合内独立请求）及可选 **`EVENT_DB_DUAL_WRITE`** 与 **`collect`** 联调。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`** + **B7** **`POST /api/event`** / **`collect` 双写**；Redis 可降级）；`develop.md` / `develop1.md` 已废止）。

@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "c4f8a1b2-3d5e-6f70-8a9b-0c1d2e3f4a5b",
-    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+B6+验证流）",
-    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B6 收藏需 **MySQL + seed**（`product` 表含 `p001` 等），Bearer。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4/B6 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
+    "name": "知礼 prototype（B0+B1+B2+B3+B4+B5+B6+B7+验证流）",
+    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3/B4 需先有一条默认画像。B5「GET /api/product/:id」可不登录；带 Bearer 时需默认画像以生成匹配理由。B6 收藏需 **MySQL + seed**。B7：`POST /api/event` 需 MySQL；可选 Bearer；`EVENT_DB_DUAL_WRITE=1` 时 `POST /api/collect` 会双写 `event`。B4/B5 可选 Redis（`npm run dev:db`）。B1/B2/B3/B4/B6 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -264,7 +264,22 @@
           "mode": "raw",
           "raw": "{\n  \"event\": \"page_view\",\n  \"user_id\": \"postman_test_user\",\n  \"group\": \"B\",\n  \"page_name\": \"browse\",\n  \"timestamp\": 1710000000000\n}"
         },
-        "url": "{{base_url}}/api/collect"
+        "url": "{{base_url}}/api/collect",
+        "description": "无 Auth。若 server 设置 EVENT_DB_DUAL_WRITE=1 且已连 MySQL，成功后另写 event 表。"
+      }
+    },
+    {
+      "name": "POST /api/event (B7)",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"impression\",\n  \"user_id\": \"postman_event_anon\",\n  \"group\": \"B\",\n  \"page_name\": \"browse\",\n  \"product_id\": \"p001\",\n  \"position\": 0,\n  \"timestamp\": 1710000000001\n}"
+        },
+        "url": "{{base_url}}/api/event",
+        "description": "B7：需 MySQL。匿名时 event.user_id 为 NULL，user_id 字符串在 extra。可改 Auth 为 Bearer {{token}} 验证登录态 user_id 入库。"
       }
     },
     {
