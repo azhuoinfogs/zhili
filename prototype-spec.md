@@ -2,7 +2,7 @@
 
 本文档与 [`plan0.md`](plan0.md)（验证流程）、[`prd_v0.md`](prd_v0.md)（产品需求）对齐，描述本仓库 **`prototype/`** 目录下的可运行实现。PRD 中小程序正式稿的视觉以 **PRD §5.2**（浅色、主色 `#FF6B6B` 等）为准；本 H5 验证端为便于传播与 A/B 实验，采用 **深色「礼遇艺廊」主题**（参考 UI/UX Pro Max 奢侈品电商方向），字段与接口与 PRD 一致。
 
-**与仓库同步（快照）**：2026-05-02 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：200**（`node scripts/generate-products.mjs 200`）；列表支持 **下拉刷新、触底分页**；详情 **多图 + 类似推荐** 见 API。整体排期见 **[develop2.md](develop2.md)** 篇首 **「当前开发状态」**。
+**与仓库同步（快照）**：2026-05-04 — H5/API/算法/埋点路径与下文一致；**`products.json` 商品条数：200**；列表支持 **下拉刷新、触底分页**；详情 **多图 + 类似推荐** 见 API。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（JWT）；详见 **`server/.env.example`** 与 [prototype/README.md](prototype/README.md)「B1」。整体排期与 PRD 分项见 **[develop2.md](develop2.md)**（篇首「当前开发状态」+ **附录 A**）。
 
 ---
 
@@ -36,7 +36,9 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/health` | 健康检查 |
+| `GET` | `/api/health` | 健康检查；含 **`database`** / **`redis`** / **`db_product_count`**；**`auth_configured`**（微信或 `WECHAT_MOCK`）、**`jwt_strong_secret`**（是否已换默认 JWT 密钥） |
+| `POST` | `/api/user/login` | **B1** 微信登录；Body：`{ "code", "anon_id"?, "zhili_vid"? }`；返回 `token`、`expires_in`、`user`；需 MySQL；本地可 **`WECHAT_MOCK=1`** |
+| `GET` | `/api/user/me` | **B1** 当前用户；Header：`Authorization: Bearer <token>` |
 | `GET` | `/api/hot` | 对照组；Query：`occasion`、`budget`、`style`；**`offset`（默认 0）、`limit`（默认 20，最大 50）** 分页 |
 | `POST` | `/api/personalized` | 实验组；Body：画像字段 + `shelf` + **`offset` / `limit`**（同上） |
 | `GET` | `/api/related/:id` | 类似推荐；Query：可选 **`profile`**（JSON 字符串，与 `personalized` 画像一致时理由更准） |
@@ -73,8 +75,8 @@ A/B：`localStorage.zhili_group` 为 `A`（热门 `GET /api/hot`）或 `B`（个
 
 ## 6. 相关文档
 
-- **整合开发计划（推荐）**：**[`develop2.md`](develop2.md)**（合并 develop.md + develop1.md，并对照当前实现勘误）
-- 分阶段开发路线与 PRD 细对照：**[`develop.md`](develop.md)**
+- **整合开发计划（推荐）**：**[`develop2.md`](develop2.md)**（含 **附录 A**：PRD 分项与 H5 阶段 A–E；原 develop.md / develop1 已废止）
+- 接口契约详表：**[`api.md`](../api.md)**
 - 启动与踩坑：**[`prototype/README.md`](prototype/README.md)**
 - 验证阶段与指标：**[`plan0.md`](plan0.md)**
 - 产品功能与正式端视觉：**[`prd_v0.md`](prd_v0.md)**

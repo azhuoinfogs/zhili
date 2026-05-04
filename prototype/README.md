@@ -107,6 +107,33 @@ icacls 'C:\ProgramData\DockerDesktop' /grant Administrators:F /t 2>$null
 | `docker compose up` 报 **`registry-1.docker.io` 超时 / failed to resolve / connectex`** | 本机访问 Docker Hub 失败（网络、IPv6、地区策略等）。在 **Docker Desktop → Settings → Docker Engine** 中为 `registry-mirrors` 配置可用镜像（以你单位/云厂商文档为准），**Apply & Restart** 后重试 `docker compose pull`；或换网络/VPN 后再拉取。 |
 | **`Access denied for user 'root'@'172.18.0.1' (using password: YES)`** 且 `.env` 里密码已与 `docker-compose.yml` 中 `MYSQL_ROOT_PASSWORD` 一致 | 数据卷 **`zhili_mysql_data` 在首次启动时已写入旧 root 密码**；之后只改 compose / `.env` 不会改库内密码。在 **`prototype` 目录**执行 **`npm run docker:mysql-fresh`**（会 **`docker compose down -v` 删除 MySQL 卷**，数据清空），再 **`npm run dev:db`** 重建表并种子；或保留数据时在容器内用旧密码登录后 `ALTER USER`。 |
 
+## B1 微信登录（MVP API）
+
+需 **MySQL 已连接**（`GET /api/health` 中 `database` 为 `connected`）。环境变量见 **`server/.env.example`**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `POST` | `/api/user/login` | Body：`{ "code": "<wx.login 临时码>", "anon_id"?: "<可选 zhili_vid>" }`。返回 `{ token, expires_in, user }`。 |
+| `GET` | `/api/user/me` | Header：`Authorization: Bearer <token>`。返回当前用户行。 |
+
+- **真机/联调**：配置 `WECHAT_APPID`、`WECHAT_SECRET`，并设置 **`JWT_SECRET`**（勿用默认值）。  
+- **本地无小程序密钥**：在 `server/.env` 中设 **`WECHAT_MOCK=1`**，任意长度足够的 `code` 会得到稳定 **`mock_*` openid**（不调微信接口）。
+
+`GET /api/health` 中会多 **`auth_configured`**（微信或 mock 已配置）、**`jwt_strong_secret`**（是否已换默认 JWT 密钥）。
+
+**Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
+
+```powershell
+# 推荐：JSON 放在单引号里，内部双引号无需转义
+curl.exe -s -X POST http://127.0.0.1:3000/api/user/login -H "Content-Type: application/json" -d '{"code":"test-code-123456"}'
+```
+
+或不用 curl：
+
+```powershell
+Invoke-RestMethod -Uri 'http://127.0.0.1:3000/api/user/login' -Method Post -ContentType 'application/json' -Body '{"code":"test-code-123456"}'
+```
+
 ## 启动（务必先 API，再前端）
 
 终端 1（API，默认从 3000 起占用；若被占用会自动顺延，并写入 `server/.listen-port`）：

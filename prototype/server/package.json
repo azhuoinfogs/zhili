@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "node --test scoring.test.mjs",
+    "test": "node --test scoring.test.mjs auth.test.mjs",
     "migrate": "node migrate.js",
     "seed": "node seed.js",
     "init-db": "node migrate.js && node seed.js"
@@ -16,6 +16,7 @@
     "express": "^4.21.0",
     "mysql2": "^3.9.7",
     "redis": "^4.6.7",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "jsonwebtoken": "^9.0.2"
   }
 }

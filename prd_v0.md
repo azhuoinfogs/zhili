@@ -300,7 +300,7 @@ v3.0	M7-M12	会员体系、品牌合作、团体送礼模式	月收入≥5万元
 
 12. 附录
 
-**工程与开发计划（与本文同步迭代）**：[develop2.md](develop2.md)（整合排期 + **当前开发状态快照**） · [develop.md](develop.md)（PRD 细对照） · [prototype-spec.md](prototype-spec.md)
+**工程与开发计划（与本文同步迭代）**：[develop2.md](develop2.md)（整合排期 + **当前开发状态快照** + **附录 A** PRD 分项） · [prototype-spec.md](prototype-spec.md) · [api.md](api.md)
 
 标签体系详细表（10个圈层及30个礼品示例）
 

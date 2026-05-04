@@ -6,6 +6,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { computeScore, buildReasonLines } from './scoring.js';
 import { initDatabase, initRedis, getPool, getRedis, query } from './db.js';
+import userRouter from './routes/user.js';
+import { wechatAuthConfigured } from './lib/wechat.js';
+import { jwtConfigured } from './lib/jwt.js';
 import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -62,6 +65,8 @@ const BUDGET_RANGE = {
 
 app.use(cors());
 app.use(express.json({ limit: '256kb' }));
+
+app.use('/api/user', userRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
@@ -243,6 +248,8 @@ app.get('/api/health', async (req, res) => {
     database: 'not_connected',
     redis: 'not_connected',
     db_product_count: null,
+    auth_configured: wechatAuthConfigured(),
+    jwt_strong_secret: jwtConfigured(),
   };
 
   if (getPool()) {

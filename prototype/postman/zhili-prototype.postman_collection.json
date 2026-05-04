@@ -1,0 +1,115 @@
+{
+  "info": {
+    "_postman_id": "c4f8a1b2-3d5e-6f70-8a9b-0c1d2e3f4a5b",
+    "name": "知礼 prototype（B0+B1+验证流）",
+    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；在 Environment 中建同名 `token` 或在 Login 的 Tests 里改用 `pm.collectionVariables.set`。B1 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:3000" },
+    { "key": "token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "GET /api/health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/health",
+        "description": "检查 database、auth_configured、jwt_strong_secret 等。"
+      }
+    },
+    {
+      "name": "POST /api/user/login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 200) {",
+              "  try {",
+              "    const j = pm.response.json();",
+              "    if (j.token) pm.collectionVariables.set('token', j.token);",
+              "  } catch (e) {}",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"postman-mock-login-001\",\n  \"zhili_vid\": \"postman_anon_001\"\n}"
+        },
+        "url": "{{base_url}}/api/user/login",
+        "description": "需 WECHAT_MOCK=1 或 WECHAT_APPID+SECRET。成功后将 token 写入 Collection Variable `token`（与下方 /me 的 Bearer {{token}} 对应）。"
+      }
+    },
+    {
+      "name": "GET /api/user/me",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/user/me",
+        "description": "Bearer 使用 Collection 或 Environment 中的 `token`（先跑 Login）。"
+      }
+    },
+    {
+      "name": "GET /api/hot",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/hot?occasion=birthday&budget=100-300&style=practical&offset=0&limit=5"
+      }
+    },
+    {
+      "name": "POST /api/personalized",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"relation\": \"friend\",\n  \"ageBand\": \"26-35\",\n  \"interests\": [\"tech\", \"home\"],\n  \"occasion\": \"birthday\",\n  \"budget\": \"100-300\",\n  \"gender\": \"male\",\n  \"style\": \"practical\",\n  \"taboos\": [],\n  \"shelf\": {\n    \"occasion\": \"birthday\",\n    \"budget\": \"100-300\",\n    \"style\": \"practical\"\n  },\n  \"offset\": 0,\n  \"limit\": 10\n}"
+        },
+        "url": "{{base_url}}/api/personalized"
+      }
+    },
+    {
+      "name": "GET /api/related/p001",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/related/p001?profile=%7B%22relation%22%3A%22friend%22%2C%22ageBand%22%3A%2226-35%22%2C%22interests%22%3A%5B%22tech%22%5D%2C%22occasion%22%3A%22birthday%22%2C%22budget%22%3A%22100-300%22%2C%22gender%22%3A%22male%22%2C%22style%22%3A%22practical%22%2C%22taboos%22%3A%5B%5D%7D",
+        "description": "可选禁用 Params 中的 profile 对比无画像时的 reasons。"
+      }
+    },
+    {
+      "name": "POST /api/collect",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event\": \"page_view\",\n  \"user_id\": \"postman_test_user\",\n  \"group\": \"B\",\n  \"page_name\": \"browse\",\n  \"timestamp\": 1710000000000\n}"
+        },
+        "url": "{{base_url}}/api/collect"
+      }
+    },
+    {
+      "name": "GET /api/export/events.csv",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/export/events.csv",
+        "description": "需先至少成功一次 collect 以生成 events.csv。"
+      }
+    }
+  ]
+}

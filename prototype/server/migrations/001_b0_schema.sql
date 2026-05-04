@@ -1,4 +1,4 @@
--- B0 工程与数据基座（develop2 §6 / develop1 勘误后英文键）
+-- B0 工程与数据基座（develop2 §6；画像/商品英文键与 API 对齐）
 -- 执行：在 server 目录 npm run migrate
 
 CREATE TABLE IF NOT EXISTS `user` (
