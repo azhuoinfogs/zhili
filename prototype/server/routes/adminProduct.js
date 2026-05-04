@@ -3,6 +3,7 @@ import { getPool, query, execute, getRedis } from '../db.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { requireAdmin } from '../middleware/requireAdmin.js';
 import { invalidateProductDetailById } from '../lib/productDetailCache.js';
+import { invalidateAllRecommendations } from '../lib/recommendCache.js';
 import {
   ADMIN_PRODUCT_ID_RE,
   validateCreateProductBody,
@@ -130,6 +131,7 @@ router.post('/', async (req, res) => {
       ]
     );
     const rows = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [d.productId]);
+    await invalidateAllRecommendations(getRedis());
     res.status(201).json({ product: rowToAdminProduct(rows[0]) });
   } catch (e) {
     if (isDupKeyError(e)) {
@@ -189,6 +191,7 @@ router.put('/:productId', async (req, res) => {
       ]
     );
     await invalidateProductDetailById(getRedis(), productId);
+    await invalidateAllRecommendations(getRedis());
     const out = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [productId]);
     res.json({ product: rowToAdminProduct(out[0]) });
   } catch (e) {
@@ -213,6 +216,7 @@ router.delete('/:productId', async (req, res) => {
       return;
     }
     await invalidateProductDetailById(getRedis(), productId);
+    await invalidateAllRecommendations(getRedis());
     res.status(204).end();
   } catch (e) {
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });

@@ -6,6 +6,79 @@
 
 **页面流程**：`landing`（可选品牌首屏）→ `tags`（画像与标签）→ `browse`（推荐列表）→ 详情抽屉。与 [`plan0.md`](../plan0.md) 最小三屏的对应关系见 `prototype-spec.md` §2。
 
+## npm 脚本速查
+
+仓库**没有**根目录 `package.json`；请在**对应子目录**执行 `npm`（各子项目首次需在该目录执行一次 `npm install`）。
+
+| 目录 | 包名 | 命令 | 说明 |
+|------|------|------|------|
+| **`prototype/`** | `zhili-prototype` | `npm run dev:db` | 一键：Docker 起 MySQL/Redis → 等就绪 → 若无 `server/.env` 则从模板创建 → 在 `server` 内执行 **`migrate` + `seed`** |
+| | | `npm run docker:up` | 仅 `docker compose up -d` |
+| | | `npm run docker:down` | 停止并移除容器（卷默认保留） |
+| | | `npm run docker:mysql-fresh` | `down -v` 后重建（**MySQL 数据清空**） |
+| | | `npm run docker:logs` | `docker compose logs -f` |
+| | | `npm run gen:products` | 执行 `node scripts/generate-products.mjs 120` 生成打标商品数据 |
+| **`prototype/server/`** | `zhili-mvp-server` | `npm start` / `npm run dev` | 启动 API（均为 `node index.js`；端口默认 3000，占用则顺延并写入 `.listen-port`） |
+| | | `npm run migrate` | 执行 `migrate.js`（含 `002`/`003` 等 SQL） |
+| | | `npm run seed` | `node seed.js` |
+| | | `npm run init-db` | `migrate` 后接 `seed` |
+| | | `npm test` | `node --test` 跑 `*.test.mjs` 套件 |
+| **`prototype/client/`** | `zhili-validate-client` | `npm run dev` | H5：Vite 默认 **5173**，`/api` 代理目标见环境变量 **`VITE_API_TARGET`**（未设时读 `../server/.listen-port`） |
+| | | `npm run build` / `npm run preview` | 生产构建 / 本地预览构建结果 |
+| **`prototype/admin/`** | `zhili-admin` | `npm run dev` | 运营后台：Vite 默认 **5174**；`/api`、`/uploads` 代理到 **`VITE_API_PROXY_TARGET`**（默认 `http://127.0.0.1:3000`） |
+| | | `npm run build` / `npm run preview` | 构建 / 预览 |
+
+### 使用示例
+
+**路径**：下文 `prototype` 表示仓库内 `prototype` 文件夹；Windows 可把 `cd prototype/server` 写成 `cd prototype\server`。
+
+**1）Docker 一键库 + 起 API + 起 H5（常见本机联调）**
+
+```bash
+cd prototype/server && npm install
+cd ../client && npm install
+cd .. && npm run dev:db
+cd server && npm start
+```
+
+新终端：
+
+```bash
+cd prototype/client && npm run dev
+```
+
+**2）不用 Docker、已有 MySQL（库与账号已配在 `server/.env`）**
+
+```bash
+cd prototype/server && npm install && npm run migrate && npm run seed && npm start
+```
+
+**3）起运营后台（须 API 已启动，且 `server/.env` 已设 `ZHILI_ADMIN_CONSOLE_PASSWORD`）**
+
+```bash
+cd prototype/admin && npm install && npm run dev
+```
+
+若 API 实际端口不是 3000（例如顺延到 3003），在**启动 admin 之前**（PowerShell）：
+
+```powershell
+$env:VITE_API_PROXY_TARGET = 'http://127.0.0.1:3003'
+cd prototype\admin
+npm run dev
+```
+
+**4）只跑服务端测试**
+
+```bash
+cd prototype/server && npm test
+```
+
+**5）重生成商品池 JSON（数量改脚本或改 `prototype/package.json` 中 `gen:products` 行）**
+
+```bash
+cd prototype && npm run gen:products
+```
+
 ## 本机 Docker（MySQL + Redis，一键建库）
 
 需已安装 [Docker Desktop](https://www.docker.com/products/docker-desktop/)（或 Docker Engine + Compose v2）。**默认占用本机 3306、6379**；若与本机已有 MySQL/Redis 冲突，请先停掉本机服务或改 `docker-compose.yml` 中的端口映射。

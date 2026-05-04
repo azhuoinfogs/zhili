@@ -14,6 +14,7 @@ import {
   recommendListCacheKey,
   RECOMMEND_CACHE_TTL_SEC,
 } from '../lib/recommendCache.js';
+import { getListedProductPool } from '../lib/productCatalog.js';
 
 const router = Router();
 
@@ -87,13 +88,14 @@ router.get('/', requireAuth, async (req, res) => {
       }
     }
 
+    const productPool = await getListedProductPool(productsData);
     let list;
     if (mode === 'hot') {
-      list = runHotList(productsData, shelf, offset, limit);
+      list = runHotList(productPool, shelf, offset, limit);
     } else {
       const api = rowToApiProfile(profileRow);
       const profile = apiProfileToScoringProfile(api);
-      list = runPersonalizedList(productsData, profile, shelf, offset, limit);
+      list = runPersonalizedList(productPool, profile, shelf, offset, limit);
     }
 
     const body = { list, page, size, mode };

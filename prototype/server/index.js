@@ -18,6 +18,7 @@ import adminUploadRouter from './routes/adminUpload.js';
 import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
+import { getListedProductPool } from './lib/productCatalog.js';
 import { relatedProductCards } from './lib/relatedCore.js';
 import { parseProfileFromQuery } from './routes/product.js';
 import {
@@ -86,19 +87,31 @@ const uploadsDir = path.join(dataDir, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
-app.get('/api/hot', (req, res) => {
+app.get('/api/hot', async (req, res) => {
   const q = req.query || {};
   const { limit, offset } = parsePaging(q);
   const shelf = shelfFromQuery(q);
-  res.json(runHotList(productsData, shelf, offset, limit));
+  try {
+    const pool = await getListedProductPool(productsData);
+    res.json(runHotList(pool, shelf, offset, limit));
+  } catch (e) {
+    console.error('[知礼] /api/hot 失败:', e.message);
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
 });
 
-app.post('/api/personalized', (req, res) => {
+app.post('/api/personalized', async (req, res) => {
   const body = req.body || {};
   const { shelf, ...profile } = body;
   const { limit, offset } = parsePagingFromBody(body);
   const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
-  res.json(runPersonalizedList(productsData, profile, shelfQ, offset, limit));
+  try {
+    const pool = await getListedProductPool(productsData);
+    res.json(runPersonalizedList(pool, profile, shelfQ, offset, limit));
+  } catch (e) {
+    console.error('[知礼] /api/personalized 失败:', e.message);
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
 });
 
 app.get('/api/related/:id', async (req, res) => {
@@ -110,7 +123,8 @@ app.get('/api/related/:id', async (req, res) => {
       return;
     }
     const profile = parseProfileFromQuery(req.query);
-    res.json(relatedProductCards(productsData, resolved.product, profile));
+    const pool = await getListedProductPool(productsData);
+    res.json(relatedProductCards(pool, resolved.product, profile));
   } catch (e) {
     console.error('[知礼] /api/related 失败:', e.message);
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });

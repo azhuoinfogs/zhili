@@ -1,5 +1,5 @@
 /**
- * B5：按 develop2 §9.6.3 — DB 优先，失败或未命中回退 `productsData`
+ * B5：DB 可用且查询成功时 **仅以 DB 为准**（删除/下架后不回退 JSON）；仅无连接或查询异常时回退 `productsData`。
  */
 import { getPool, query } from '../db.js';
 import { rowToKernelProduct } from './productMapper.js';
@@ -23,6 +23,7 @@ export async function resolveProductById(id, productsData) {
       if (rows.length) {
         return { product: rowToKernelProduct(rows[0]), source: 'db' };
       }
+      return null;
     } catch (e) {
       console.warn('[知礼] resolveProductById DB 失败，回退 JSON:', e.message);
     }

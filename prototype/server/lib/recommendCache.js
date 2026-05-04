@@ -35,3 +35,14 @@ export async function invalidateUserRecommendations(redis, userId) {
     console.warn('[知礼] recommend 缓存失效失败:', e.message);
   }
 }
+
+/** 商品增删改后清空全部用户推荐列表缓存（避免仍含已删商品） */
+export async function invalidateAllRecommendations(redis) {
+  if (!redis) return;
+  try {
+    const keys = await redis.keys('recommend:*');
+    if (keys && keys.length) await redis.del(keys);
+  } catch (e) {
+    console.warn('[知礼] recommend 全量缓存失效失败:', e.message);
+  }
+}

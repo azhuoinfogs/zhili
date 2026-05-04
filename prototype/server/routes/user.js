@@ -5,6 +5,7 @@ import { signUserToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rowToApiProfile } from '../lib/profileSchema.js';
 import { productsData } from '../productsData.js';
+import { getListedProductPool } from '../lib/productCatalog.js';
 import {
   parsePaging,
   shelfFromQuery,
@@ -138,17 +139,18 @@ router.get('/recommend', requireAuth, async (req, res) => {
       return;
     }
     const apiProfile = rowToApiProfile(rows[0]);
+    const productPool = await getListedProductPool(productsData);
     if (mode === 'hot') {
       res.json({
         mode: 'hot',
-        list: runHotList(productsData, shelf, offset, limit),
+        list: runHotList(productPool, shelf, offset, limit),
       });
       return;
     }
     const profile = apiProfileToScoringProfile(apiProfile);
     res.json({
       mode: 'personalized',
-      list: runPersonalizedList(productsData, profile, shelf, offset, limit),
+      list: runPersonalizedList(productPool, profile, shelf, offset, limit),
     });
   } catch (e) {
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
