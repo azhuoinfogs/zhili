@@ -1,0 +1,57 @@
+<view class="browse-screen">
+  <view class="browse-head glass">
+    <button class="link-ghost" bindtap="backToTags">← 调整标签</button>
+    <text class="browse-title font-serif">礼遇名录</text>
+    <text class="browse-meta">{{groupMeta}}</text>
+  </view>
+
+  <view class="filter-bar glass">
+    <text class="filter-eyebrow">Refine</text>
+    <view class="filter-row">
+      <text class="filter-label">场合</text>
+      <picker mode="selector" range="{{OCC_LABELS}}" value="{{occFIndex}}" bindchange="onOccFilter">
+        <view class="lx-input sm">{{OCC_LABELS[occFIndex]}}</view>
+      </picker>
+    </view>
+    <view class="filter-row">
+      <text class="filter-label">预算</text>
+      <picker mode="selector" range="{{BUD_LABELS}}" value="{{budFIndex}}" bindchange="onBudFilter">
+        <view class="lx-input sm">{{BUD_LABELS[budFIndex]}}</view>
+      </picker>
+    </view>
+    <view class="filter-row">
+      <text class="filter-label">风格</text>
+      <picker mode="selector" range="{{STYLE_LABELS}}" value="{{styleFIndex}}" bindchange="onStyleFilter">
+        <view class="lx-input sm">{{STYLE_LABELS[styleFIndex]}}</view>
+      </picker>
+    </view>
+    <button class="filter-clear" bindtap="clearListFilters">清空筛选</button>
+  </view>
+
+  <view wx:if="{{loading}}" class="hint">加载中…</view>
+  <view wx:elif="{{products.length === 0}}" class="empty-state glass">
+    <text class="empty-title font-serif">暂无契合之选</text>
+    <text class="empty-desc">请尝试放宽筛选，或返回调整标签。</text>
+    <button class="cta-outline" bindtap="clearListFilters">清空筛选</button>
+  </view>
+  <view wx:else class="grid">
+    <view
+      class="item product-card glass"
+      wx:for="{{products}}"
+      wx:key="id"
+      wx:for-item="p"
+      wx:for-index="idx"
+      data-id="{{p.id}}"
+      data-pos="{{idx}}"
+      bindtap="openDetail"
+    >
+      <image class="img" src="{{p.image}}" mode="aspectFill" />
+      <view class="info">
+        <text class="title">{{p.title}}</text>
+        <text class="price">¥{{p.price}}</text>
+        <text wx:if="{{p.reasons && p.reasons[0]}}" class="p-reason">{{p.reasons[0].icon}} {{p.reasons[0].text}}</text>
+      </view>
+    </view>
+  </view>
+  <view wx:if="{{!loading && products.length > 0 && !hasMore}}" class="end-hint">已加载全部</view>
+</view>

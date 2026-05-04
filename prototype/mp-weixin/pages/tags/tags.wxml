@@ -1,0 +1,59 @@
+<wxs src="./chip.wxs" module="chip" />
+<view class="tags-screen">
+  <view class="tags-head glass">
+    <button class="link-ghost" bindtap="backToHome">← 返回首页</button>
+    <text class="tags-title font-serif">偏好与场景</text>
+    <text class="tags-sub">请选择收礼人标签，我们将据此匹配礼遇清单。</text>
+  </view>
+
+  <view class="tags-body glass">
+    <text class="lx-label">关系</text>
+    <picker mode="selector" range="{{REL_LABELS}}" value="{{relIndex}}" bindchange="onRel">
+      <view class="lx-input">{{REL_LABELS[relIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">年龄段</text>
+    <picker mode="selector" range="{{AGE_LABELS}}" value="{{ageIndex}}" bindchange="onAge">
+      <view class="lx-input">{{AGE_LABELS[ageIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">收礼人性别</text>
+    <picker mode="selector" range="{{GENDER_LABELS}}" value="{{genderIndex}}" bindchange="onGender">
+      <view class="lx-input">{{GENDER_LABELS[genderIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">场合</text>
+    <picker mode="selector" range="{{OCC_LABELS}}" value="{{occIndex}}" bindchange="onOcc">
+      <view class="lx-input">{{OCC_LABELS[occIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">预算</text>
+    <picker mode="selector" range="{{BUD_LABELS}}" value="{{budIndex}}" bindchange="onBud">
+      <view class="lx-input">{{BUD_LABELS[budIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">风格</text>
+    <picker mode="selector" range="{{STYLE_LABELS}}" value="{{styleIndex}}" bindchange="onStyle">
+      <view class="lx-input">{{STYLE_LABELS[styleIndex]}}</view>
+    </picker>
+
+    <text class="lx-label">兴趣圈层（最多 3 项，可跳过）</text>
+    <view class="lx-chips">
+      <button
+        wx:for="{{INTEREST_OPTIONS}}"
+        wx:key="v"
+        class="lx-chip {{chip.has(interests, item.v) ? 'on' : ''}}"
+        data-v="{{item.v}}"
+        bindtap="toggleInterest"
+      >{{item.l}}</button>
+    </view>
+
+    <text class="lx-label">禁忌（可选）</text>
+    <view class="lx-chips">
+      <button class="lx-chip {{chip.has(taboos, 'smell') ? 'on' : ''}}" data-code="smell" bindtap="toggleTaboo">气味敏感</button>
+      <button class="lx-chip {{chip.has(taboos, 'religion') ? 'on' : ''}}" data-code="religion" bindtap="toggleTaboo">宗教禁忌</button>
+    </view>
+
+    <button class="cta-gold" bindtap="submitTags">呈献推荐</button>
+  </view>
+</view>

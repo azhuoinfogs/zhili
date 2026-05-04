@@ -1,6 +1,6 @@
 # 知礼微信小程序骨架（PRD v1.0 预览）
 
-三页：`profile`（画像简版）→ `index`（双列推荐，A/B 与 H5 一致）→ `detail`（详情占位）。**样式与 `prototype/client`（深色礼遇艺廊 + 金色强调）对齐**，见 **`app.wxss`** 与各页 **`*.wxss`**。
+四页（与 **`prototype/client`** 阶段 B 方案一致）：**`landing`** → **`tags`**（画像与 client 表单枚举对齐）→ **`browse`**（双列推荐、顶筛防抖、下拉刷新、触底分页；A/B 与 H5 一致）→ **`detail`**（**`GET /api/product/:id?profile=`**、相关推荐）。**样式与 `prototype/client`（深色礼遇艺廊 + 金色强调）对齐**，见 **`app.wxss`** 与各页 **`*.wxss`**。验收对照表见 **[ACCEPTANCE.md](./ACCEPTANCE.md)**（映射 **`develop2.md`** 阶段 B **B1～B6**）。
 
 **契约**：接口与埋点以仓库根 [**`prototype-spec.md`**](../../prototype-spec.md) 为准；HTTP 以 [**`api.md`**](../../api.md) 为准。本文只回答两件事：**① 按什么顺序做能跑通骨架**；**② 卡住时查哪一节**。
 
@@ -12,7 +12,7 @@
 
 | 阶段 | 目标 | 谁需要 |
 |------|------|--------|
-| **一、环境与本机联调** | 微信开发者工具**模拟器**里：`profile` → `index` 能拉出推荐列表 | **所有人，先做** |
+| **一、环境与本机联调** | 微信开发者工具**模拟器**里：`landing` → `tags` → `browse` 能拉出推荐列表并进入 `detail` | **所有人，先做** |
 | **二、真机与域名校验** | 手机预览/体验版能访问 API（多为 HTTPS + 合法域名） | 真机联调、提审前 |
 | **三、PRD 功能扩展** | 登录、详情 B5、收藏、埋点、购买链路等 | 产品里程碑；任务表见 [**`develop2.md`**](../../develop2.md) **附录 A §三 阶段 B** |
 
@@ -35,13 +35,14 @@
 | **9** | 微信开发者工具 → **导入项目** → 目录选 **`prototype/mp-weixin`** → AppID 与步骤 8 一致 → **编译** | 无红错编译通过 |
 | **10** | 工具栏 **详情 → 本地设置** → 勾选 **「不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书」** | 否则 **`http://127.0.0.1`** 请求会被拦 |
 | **11** | **清缓存**（工具 **清缓存**）后再次 **编译**，避免旧配置 | 保证步骤 7 生效 |
-| **12** | 模拟器操作：**`profile`** 页选年龄/场合/预算 → 进入 **`index`** → 应出现双列卡片；点进 **`detail`** | 若列表空白或 Toast「网络错误」→ 见下文 **「阶段一常见失败」** |
+| **12** | 模拟器操作：**`landing`** → **探索商品** → **`tags`** 提交 → **`browse`** 双列列表；点卡片进 **`detail`** | 若列表空白或 Toast「网络错误」→ 见下文 **「阶段一常见失败」** |
 
 **当前骨架请求逻辑（便于对照 Network）**
 
-- 读 **`wx.getStorageSync('zhili_group')`**，无则随机 **A/B** 并写入。
-- **A 组**：`GET {apiBase}/api/hot`
-- **B 组**：`POST {apiBase}/api/personalized`，`Content-Type: application/json`，Body 为 **`zhili_profile`**（**`profile` 页写入**或代码默认对象）
+- 读 **`wx.getStorageSync('zhili_vid')`** / **`zhili_group`** / **`zhili_profile`**：`vid` 与 `group` 无则创建/随机 **A/B**；画像在 **`tags`** 提交时 **`JSON.stringify`** 写入 **`zhili_profile`**。
+- **A 组**：`GET {apiBase}/api/hot?offset&limit&occasion&budget&style`
+- **B 组**：`POST {apiBase}/api/personalized`，`Content-Type: application/json`，Body 为画像字段 + **`shelf`**（`occasion`/`budget`/`style`）+ **`offset`/`limit`**
+- **详情**：`GET {apiBase}/api/product/:id?profile=...`；**相关**：`GET {apiBase}/api/related/:id?profile=...`；**埋点**：`POST {apiBase}/api/collect`
 
 ---
 
@@ -105,9 +106,9 @@
 
 | 项 | 说明 |
 |----|------|
-| API | `GET /api/hot`、`POST /api/personalized` 与 **prototype-spec §3**、**api.md** 一致 |
-| 本地存储 | **`zhili_group`**、**`zhili_profile`** 与 H5 **`localStorage`** 键名一致 |
-| 匿名 id | 骨架未强制 **`zhili_vid`**；接 **`collect`** 时与 H5 字段对齐 |
+| API | `GET /api/hot`、`POST /api/personalized`、`GET /api/product/:id`、`GET /api/related/:id`、`POST /api/collect` 与 **prototype-spec §3**、**api.md** 一致 |
+| 本地存储 | **`zhili_vid`**、**`zhili_group`**、**`zhili_profile`** 与 H5 **`localStorage`** 键名一致 |
+| 匿名 id | **`zhili_vid`** 在 **`landing`** 首次展示时创建；**`collect`** 载荷含 **`user_id`**（与 H5 一致） |
 | 视觉 | **与 `prototype/client` 验证端一致**：深色底、玻璃卡、金色价签（见 **`client/src/style.css`**、`App.vue`）；若发版改 **PRD §5.2** 浅色系，可集中改 **`app.wxss`** 变量与 **`app.json`** `window` |
 
 H5 说明：[**`prototype-client-App-vue.md`**](../../prototype-client-App-vue.md)；产品清单：[**`prd_v0.md`**](../../prd_v0.md)。

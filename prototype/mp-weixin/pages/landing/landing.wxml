@@ -1,0 +1,16 @@
+<view class="landing">
+  <view class="landing-bg" aria-hidden="true" />
+  <view class="landing-top">
+    <text class="pill-ab">{{groupLabel}}</text>
+    <text class="landing-refine">Ref. {{refSuffix}}</text>
+  </view>
+  <view class="landing-center">
+    <text class="landing-eyebrow">Curated Gifting</text>
+    <text class="landing-title font-serif">知礼</text>
+    <text class="landing-sub font-serif">懂礼更懂你</text>
+    <text class="landing-lead">为重要的人甄选一份得体之礼。\n以品味与场景为引，开启您的私人推荐。</text>
+    <button class="cta-explore" bindtap="onExplore">探索商品</button>
+    <text class="landing-hint">轻触即进入偏好标签，由算法为您呈献候选名录。</text>
+  </view>
+  <view class="landing-foot">匿名礼遇数据 · 不采集姓名与电话</view>
+</view>

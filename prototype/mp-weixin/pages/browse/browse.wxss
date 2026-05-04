@@ -1,0 +1,195 @@
+.browse-screen {
+  min-height: 100vh;
+  padding-bottom: 48rpx;
+  background: #0c0a09;
+  box-sizing: border-box;
+}
+
+.glass {
+  background: rgba(28, 25, 23, 0.55);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  border-radius: 4rpx;
+  box-shadow: 0 16rpx 64rpx rgba(0, 0, 0, 0.35);
+}
+
+.browse-head {
+  margin: 24rpx 24rpx 16rpx;
+  padding: 28rpx 32rpx;
+}
+
+.link-ghost {
+  background: transparent;
+  color: #a8a29e;
+  font-size: 26rpx;
+  padding: 0;
+  margin-bottom: 20rpx;
+  text-align: left;
+  border: none;
+}
+
+.link-ghost::after {
+  border: none;
+}
+
+.browse-title {
+  display: block;
+  font-size: 40rpx;
+  color: #fafaf9;
+  letter-spacing: 0.12em;
+  margin-bottom: 8rpx;
+}
+
+.font-serif {
+  font-family: 'Songti SC', 'SimSun', serif;
+}
+
+.browse-meta {
+  display: block;
+  font-size: 24rpx;
+  color: #78716c;
+}
+
+.filter-bar {
+  margin: 0 24rpx 20rpx;
+  padding: 24rpx 28rpx 28rpx;
+}
+
+.filter-eyebrow {
+  font-size: 20rpx;
+  letter-spacing: 0.35em;
+  color: #ca8a04;
+  margin-bottom: 16rpx;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.filter-label {
+  width: 120rpx;
+  font-size: 22rpx;
+  color: #a8a29e;
+}
+
+.lx-input.sm {
+  flex: 1;
+  padding: 16rpx 20rpx;
+  background: rgba(12, 10, 9, 0.45);
+  border: 1rpx solid rgba(255, 255, 255, 0.08);
+  color: #e7e5e4;
+  font-size: 26rpx;
+}
+
+.filter-clear {
+  margin-top: 8rpx;
+  background: transparent;
+  color: #ca8a04;
+  font-size: 24rpx;
+  border: 1rpx solid rgba(202, 138, 4, 0.35);
+  padding: 12rpx 24rpx;
+}
+
+.filter-clear::after {
+  border: none;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 12rpx 12rpx 32rpx;
+}
+
+.product-card {
+  width: calc(50% - 24rpx);
+  margin: 8rpx;
+  padding: 0;
+  overflow: hidden;
+}
+
+.img {
+  width: 100%;
+  height: 320rpx;
+  display: block;
+  background: #292524;
+}
+
+.info {
+  padding: 20rpx 20rpx 24rpx;
+}
+
+.product-card .title {
+  font-size: 24rpx;
+  font-weight: 500;
+  line-height: 1.45;
+  color: #e7e5e4;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.price {
+  display: block;
+  margin-top: 12rpx;
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #eab308;
+  letter-spacing: 0.06em;
+}
+
+.p-reason {
+  display: block;
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  color: #78716c;
+  line-height: 1.4;
+}
+
+.hint {
+  text-align: center;
+  padding: 80rpx 40rpx;
+  color: #78716c;
+  font-size: 26rpx;
+}
+
+.empty-state {
+  margin: 40rpx 24rpx;
+  padding: 56rpx 40rpx;
+  text-align: center;
+}
+
+.empty-title {
+  display: block;
+  font-size: 34rpx;
+  color: #e7e5e4;
+  margin-bottom: 16rpx;
+}
+
+.empty-desc {
+  display: block;
+  font-size: 26rpx;
+  color: #78716c;
+  line-height: 1.5;
+  margin-bottom: 32rpx;
+}
+
+.cta-outline {
+  background: transparent;
+  color: #eab308;
+  border: 2rpx solid #ca8a04;
+  font-size: 26rpx;
+  padding: 20rpx 40rpx;
+}
+
+.cta-outline::after {
+  border: none;
+}
+
+.end-hint {
+  text-align: center;
+  padding: 24rpx;
+  font-size: 22rpx;
+  color: #57534e;
+}
