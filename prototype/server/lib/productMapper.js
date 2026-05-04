@@ -27,6 +27,13 @@ function kernelGender(dbGender) {
  * @param {Record<string, unknown>} row mysql2 行
  * @returns {Record<string, unknown>}
  */
+function rowListed(row) {
+  if (row.listed === undefined || row.listed === null) return true;
+  const n = Number(row.listed);
+  if (Number.isFinite(n)) return n !== 0;
+  return String(row.listed) !== '0';
+}
+
 export function rowToKernelProduct(row) {
   const price = Number(row.price);
   return {
@@ -47,5 +54,6 @@ export function rowToKernelProduct(row) {
       row.affiliate_url != null && String(row.affiliate_url).trim() !== ''
         ? String(row.affiliate_url)
         : null,
+    listed: rowListed(row),
   };
 }

@@ -23,17 +23,25 @@ test('validateCreateProductBody 合法', () => {
     gender: 'male',
     images: ['https://a/1.jpg'],
     styles: ['practical'],
+    listed: false,
   });
   assert.equal(v.ok, true);
   assert.equal(v.data.productId, 'new_p1');
   assert.equal(v.data.genderDb, 'male');
   assert.equal(v.data.price, 12.5);
+  assert.equal(v.data.listedDb, 0);
 });
 
 test('validateCreateProductBody 非法 price', () => {
   const v = validateCreateProductBody({ id: 'x', title: 't', price: -1 });
   assert.equal(v.ok, false);
   assert.match(v.message, /price/);
+});
+
+test('validateCreateProductBody 缺少 images', () => {
+  const v = validateCreateProductBody({ id: 'x', title: 't', price: 1, images: [] });
+  assert.equal(v.ok, false);
+  assert.match(v.message, /images/i);
 });
 
 test('validateCreateProductBody 非法 gender', () => {
@@ -49,7 +57,7 @@ test('validateUpdateProductBody PATCH 合并', () => {
     price: '10.00',
     sell_point: '',
     occasion_keyword: '',
-    images: JSON.stringify([]),
+    images: JSON.stringify(['https://x/1.jpg']),
     styles: JSON.stringify([]),
     occasions: JSON.stringify([]),
     interests: JSON.stringify([]),
@@ -59,6 +67,7 @@ test('validateUpdateProductBody PATCH 合并', () => {
     hot_rank: 5,
     click_count: 0,
     affiliate_url: null,
+    listed: 1,
     created_at: new Date('2026-01-01T00:00:00.000Z'),
     updated_at: new Date('2026-01-02T00:00:00.000Z'),
   };

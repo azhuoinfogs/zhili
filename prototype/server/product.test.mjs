@@ -34,8 +34,10 @@ test('rowToKernelProduct 列映射与 gender unknown→any', () => {
     taboos_avoid: JSON.stringify(['smell']),
     hot_rank: 3,
     affiliate_url: 'https://example.com/go',
+    listed: 1,
   });
   assert.equal(k.id, 'p001');
+  assert.equal(k.listed, true);
   assert.equal(k.title, '测试');
   assert.equal(k.price, 12.5);
   assert.equal(k.gender, 'any');

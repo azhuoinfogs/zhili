@@ -89,7 +89,10 @@ export function validateCreateProductBody(body) {
     return { ok: false, error: 'BAD_REQUEST', message: 'occasionKeyword 过长' };
   }
 
-  const img = body.images != null ? stringArray(body.images, MAX.images) : { ok: true, value: [] };
+  if (!Array.isArray(body.images) || body.images.length < 1) {
+    return { ok: false, error: 'BAD_REQUEST', message: 'images 至少 1 张 URL（可先上传图片再填地址）' };
+  }
+  const img = stringArray(body.images, MAX.images);
   if (!img.ok) return { ok: false, error: 'BAD_REQUEST', message: img.message };
   const st = body.styles != null ? stringArray(body.styles, MAX.arr) : { ok: true, value: [] };
   if (!st.ok) return { ok: false, error: 'BAD_REQUEST', message: st.message };
@@ -123,6 +126,10 @@ export function validateCreateProductBody(body) {
     affiliateUrl = u;
   }
 
+  let listedDb = 1;
+  if (body.listed === false || body.listed === 0 || body.listed === '0') listedDb = 0;
+  if (body.listed === true || body.listed === 1 || body.listed === '1') listedDb = 1;
+
   return {
     ok: true,
     data: {
@@ -141,6 +148,7 @@ export function validateCreateProductBody(body) {
       hotRank,
       clickCount,
       affiliateUrl,
+      listedDb,
     },
   };
 }
@@ -171,6 +179,7 @@ export function validateUpdateProductBody(row, body) {
     'hotRank',
     'affiliateUrl',
     'clickCount',
+    'listed',
   ];
   let touched = false;
   for (const k of keys) {
@@ -204,8 +213,14 @@ export function validateUpdateProductBody(row, body) {
     return { ok: false, error: 'BAD_REQUEST', message: 'occasionKeyword 过长' };
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'images') && Array.isArray(body.images) && body.images.length < 1) {
+    return { ok: false, error: 'BAD_REQUEST', message: 'images 至少保留 1 张' };
+  }
   const img = stringArray(merged.images, MAX.images);
   if (!img.ok) return { ok: false, error: 'BAD_REQUEST', message: img.message };
+  if (img.value.length < 1) {
+    return { ok: false, error: 'BAD_REQUEST', message: 'images 至少 1 张 URL' };
+  }
   const st = stringArray(merged.styles, MAX.arr);
   if (!st.ok) return { ok: false, error: 'BAD_REQUEST', message: st.message };
   const oc = stringArray(merged.occasions, MAX.arr);
@@ -231,6 +246,8 @@ export function validateUpdateProductBody(row, body) {
     affiliateUrl = u;
   }
 
+  let listedDb = merged.listed === false || merged.listed === 0 || merged.listed === '0' ? 0 : 1;
+
   return {
     ok: true,
     data: {
@@ -249,6 +266,7 @@ export function validateUpdateProductBody(row, body) {
       hotRank,
       clickCount: cc.value,
       affiliateUrl,
+      listedDb,
     },
   };
 }
@@ -273,6 +291,7 @@ export function rowToAdminProduct(row) {
     taboosAvoid: k.taboosAvoid,
     hotRank: k.hotRank,
     affiliateUrl: k.affiliateUrl,
+    listed: Boolean(k.listed),
     clickCount: Number(row.click_count) || 0,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,

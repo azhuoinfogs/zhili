@@ -1,7 +1,7 @@
 # 知礼 · 整合开发计划（develop2）
 
 **版本**：v3.0  
-**更新**：2026-05-04（**B9** **`/api/admin/products*`** 已落地；**排期**：**B8 联盟后移**；**B7** **`/api/event`**；**B6** **`/api/favorite*`**；[api.md](api.md) **§4.2.6**；**§9.5.0**）  
+**更新**：2026-05-04（**develop2 与仓库同步**：**§9.3.5**/**§9.9** 定稿与 WBS 状态；**B9** **`/api/admin/products*`**；**B8** 联盟后移；[api.md](api.md) **§4.2.6**）  
 **状态**：待评审（仓库 **B0 + B1 + B2 + B3 + B4 + B5 + B6 + B7 + B9 + 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
@@ -35,7 +35,7 @@
 | 文档 | 用途 |
 |------|------|
 | **develop2.md（本文）** | 整合：验证门 + MVP 全量结构（范围/技术/库表/API/任务/验收/灰度/风险）+ `prototype` 勘误与映射；**附录 A** 为 PRD 分项与阶段 A–E |
-| [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **§4.2.1**；**B4** **`GET /api/recommend`** **§4.2.2**；Redis 约定 **§8.3**；Postman **§10** |
+| [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **§4.2.1**；**B4** **`GET /api/recommend`** **§4.2.2**；**B9** **`/api/admin/products*`** **§4.2.6**；Redis 约定 **§8.3**；Postman **§10** |
 | [prototype-spec.md](prototype-spec.md) | 当前验证端工程与埋点事实 |
 
 > 原 `develop.md`、`develop1.md` 已废止；SQL 与迁移以 **`prototype/server/migrations/*.sql`** 与本文 **§6** 为准，需追溯全文可查 Git 历史。
@@ -63,7 +63,7 @@
 
 | 模块 | 已实现 | 仍为缺口 |
 |------|--------|----------|
-| H5 | 同快照表 | 多画像、微信登录、收藏列表持久化 |
+| H5 | 同快照表 | 多画像、微信登录；**收藏列表与 B6 服务端 API 的 H5 全量接线**（后端 **`/api/favorite*`** 已具备） |
 | API | 同快照表 | **收藏（B6）**、**埋点入库（B7）**、**商品写（B9）** 已具备；**联盟 B8（后移）** 仍待 |
 | 数据 | **200** 条商品 JSON；API 返回 `images[]`；**Docker 下可** `seed` 落 **`product` 表**与库表结构对齐 | 联盟字段、运营后台；**线上**仍以 develop1 数据层为准 |
 | 小程序 | 三页 + PRD 色顶栏 | WeUI 全量、登录、与 H5 同等交互、埋点全量 |
@@ -234,7 +234,7 @@
 | B5  | **商品读模型（详情）**    | **`GET /api/product/:id`**：DB/内存统一解析、**`enrich`/`buildReasonLines`** 与列表同源；可选 **`profile` query** 与 **Bearer 默认画像**；**不**做收藏/转链/写库。目的、边界、数据源、WBS 见 **§9.6**                                                                                              | B0、（B1、B2 若采用登录态理由）          | **主路径已实现**：**`routes/product.js`**、**`lib/productMapper.js`**、**`lib/productResolve.js`**、**`lib/productDetailCache.js`**、**`lib/relatedCore.js`**、**`middleware/optionalAuth.js`**、**`product.test.mjs`**；契约 [api.md](api.md) **§4.2.3**。**余量**：画像变更不主动清详情缓存（依赖 **TTL**；若需可后续 **`SCAN`** 策略） |
 | B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 **`collection`**（**§9.7**）；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                 | B0、B1                        | **主路径已实现**：**`routes/favorite.js`**、**`lib/favoriteHelpers.js`**、**`favorite.test.mjs`**；契约 [api.md](api.md) **§4.2.4**；**细化 WBS**见 **§9.7**                                                                                                                                                  |
 | B7  | **埋点入库（可选）**     | **`POST /api/event`** 写 **`event`**；可选与 **`POST /api/collect` 双写**（**`EVENT_DB_DUAL_WRITE`**，**§9.8.4**）；匿名 **`zhili_vid`** 等进 **`extra` JSON**（§6.1、**§9.8.3**）                                                                                         | B0、（B1 若采用「登录态 `user_id`」分支） | **主路径已实现**：**`routes/event.js`**、**`lib/eventPayload.js`**、**`lib/eventDb.js`**、**`lib/eventDualWrite.js`**、**`event.test.mjs`**；契约 [api.md](api.md) **§4.2.5**；**细化 WBS**见 **§9.8**                                                                                                          |
-| B8  | **联盟转链（排期后移）**   | **`GET /api/purchase/url`**；**`product.affiliate_url`** 等；超时重试≤2、结果缓存（**§13**）                                                                                                                                                                                                  | **B0**；**（建议）B9 已能维护 `affiliate_url` 字段后再上**                           | **排期**：置于 **B9 + B10 主干** 之后，避免无后台字段时硬接 CPS                                                                                                                                                    |
+| B8  | **联盟转链（排期后移）**   | **`GET /api/purchase/url`**；**`product.affiliate_url`** 等；超时重试≤2、结果缓存（**§13**）                                                                                                                                                                                                  | **B0**；**B9 已可维护 `affiliate_url`（`/api/admin/products`）**                           | **排期**：**B10** 相关验收后再上，避免无运营字段时硬接 CPS                                                                                                                                                    |
 | B9  | **商品写接口（极简后台）**  | **`product` 表 CRUD**（与 **§6.3**、**`lib/productMapper.js`** 可逆映射）；**`requireAuth`** + **运营鉴权**（见 **§9.9.5**）；写后 **B5 详情缓存失效**（**`invalidateProductDetailById`**）                                                                                                                                                                                                        | B0、B1                        | **主路径已实现**：**`routes/adminProduct.js`**、**`middleware/requireAdmin.js`**、**`lib/adminAccess.js`**、**`lib/productWriteSchema.js`**、**`adminProduct.test.mjs`**；契约 **[api.md](api.md)** **§4.2.6**；Postman **B9** 文件夹                                                                                                                                                    |
 | B10 | **联调与硬化**        | 与小程序端对 **鉴权头、错误码、分页、空列表**；压测推荐 P90；Redis 降级演练                                                                                                                                                                                                            | B1～B9 主链                     | 联调清单关闭、§11.2 后端相关项达标                                                                                                                                                                                                                                                                          |
 
@@ -324,7 +324,7 @@
 
 **与 develop1 表差异（本迭代可裁）**：develop1 `user` 含 `nickname` / `avatar_url`；当前 B0 表 **无** 此二列。B1 **最小闭环**可不落昵称头像；若产品要求「登录即写昵称」，则单加 **`002_user_profile_social.sql`** 或在 `user` 上 **`ALTER TABLE` 增列** 后再在登录或 **`getUserProfile`** 回调里更新（可划到 **B1.9 小迭代** 或 **B2 前**）。
 
-**建议顺序**：B0 → B1 →（B2 ∥ **B9 开发可并行准备契约**）→ B3 → B4 → B5 → B6 → **B7** → **B9** → **B10**（与 B9 对齐验收）→ **B8（联盟，后移）**。**说明**：**B7** 与 **`collect` 双写** 已在 **§9.8.4** 落地 **A+B**；**B8** 不再与 B9 并行抢排期。**B9** 与 **`products.json`/`productsData` 双源** 策略见 **§9.9.4**。
+**排期沿革与当前仓库**：历史排期曾允许 **B2 与 B9 契约并行准备**；**当前**主干已完成 **B0→B1→B2→B3→B4→B5→B6→B7→B9**，下一增量见篇首「**下一增量**」：**B3/B4 收尾** → **B10** → **B8（联盟）**。**说明**：**B7** 与 **`collect` 双写** 已在 **§9.8.4** 落地 **A+B**；**B8** 不与 B9 抢并行。**B9** 与 **`products.json`/`productsData` 双源** 已选 **S1**，见 **§9.9.4** 与 [api.md](api.md) **§4.2.6**。
 
 **与 develop1 原 14 人天行的映射**：「数据库」≈ B0；「登录」≈ B1；「画像」≈ B2；「推荐打分」≈ B3（**本仓库已将公式落在 `scoring.js`；B3 侧重「可迁移的复用面 + 与 B2 画像衔接」**，人天可减）；「Redis」≈ B4 一部分；「推荐 API」≈ B4 网关层；「商品 CRUD」≈ B9；「联盟」≈ B8；「收藏与事件」≈ B6 + B7。
 
@@ -519,7 +519,7 @@
 | **B5.6** | **错误与日志** | **400/404** 与全局错误体风格一致；日志含 **`product_id`、db_hit、fallback`**；**不**记录画像原文。**验收**：误传 id 格式 → **400**。 | B5.4 |
 | **B5.7** | **测试** | **`product.test.mjs`**：mapper、`resolve`、路由可选 mock DB。**验收**：`npm test` 通过。 | B5.4 |
 | **B5.8** | **文档与 Postman** | **api.md** §2 已实现表与专节；**README** 自测；**Postman** 新增 **`GET /api/product/:id`**；**本文 §9.6.0、篇首**。**验收**：新同事仅按文档可跑通。 | B5.7 |
-| **B5.9** | **详情短缓存（可选）** | Redis key 如 **`product:detail:{id}`**，TTL **60～300s**；**B9 写商品后 DEL**（与 **§8.3** 推荐键并列文档）。**验收**：可并入 **B10** 压测。 | B5.4、B0 |
+| **B5.9** | **详情短缓存（可选）** | Redis key 前缀 **`product:detail:v1:{productId}:`**（后缀为画像 variant，见 **`lib/productDetailCache.js`**），TTL **60～300s**（默认 **180**，可 **`PRODUCT_DETAIL_CACHE_TTL_SEC`**）；**B9** **`PUT`/`DELETE`** 成功后 **`invalidateProductDetailById`** 按 id 批量删键（与 **§8.3** 推荐键并列文档）。**验收**：可并入 **B10** 压测。 | B5.4、B0 |
 | **B5.10** | **安全与 payload** | 路径 **白名单**；保证单商品 JSON **体积极小**（**≤256KB** 远低于上限）。 | B5.4 |
 
 ### 9.7 B6 收藏业务（目的、边界与 WBS）
@@ -689,7 +689,7 @@
 
 | 维度 | 说明 |
 |------|------|
-| **PRD §3.2** | 极简后台 **商品 CRUD + 标签** 的 **HTTP 基座**；无此接口则运营只能改 JSON/手跑 SQL。 |
+| **PRD §3.2** | 极简后台 **商品 CRUD + 标签** 的 **HTTP 基座**（**已具备** **`/api/admin/products*`**）；**`hot`/`personalized`** 仍读 **`productsData`** 时须按 **§9.9.4 S1** 同步 **`products.json`** 或重启服务。 |
 | **接 B5/B6** | **`product_id`** 与 **`collection`** 外键一致；**B9 删/改商品** 须考虑 **收藏行**（**`ON DELETE CASCADE`** 已存在则删品会删收藏，或 B9.1 约定先下架不物理删）。 |
 | **为 B8 铺路** | **`affiliate_url`** 已在表内；**B9** 维护字段后 **B8** 再读库拼转链，避免「联盟先上、后台无处录 PID」倒置。 |
 
@@ -703,35 +703,35 @@
 | **推荐列表改读 MySQL** | **不默认包含**；当前 **`hot`/`personalized`** 仍依赖 **`productsData`（JSON）**（见 **§9.9.4**） |
 | **多租户、审计表全量** | **余量**；P0 可只做 **`updated_at`** + 日志 **`user_id`** |
 
-#### 9.9.3 路由与表映射（建议稿，供 B9.1 定稿）
+#### 9.9.3 路由与表映射（已定稿，与 [api.md](api.md) §4.2.6 一致）
 
 **前缀**（与公开 **`/api/product/:id`** 区分）：**`/api/admin/products`**（**`Router` 挂载于 `app.use('/api/admin/products', …)`**）。
 
 | 方法 | 路径 | 行为 |
 |------|------|------|
-| **`POST`** | **`/`** | **`INSERT`**；Body 与 **§6.3** / **`rowToKernelProduct` 逆映射** 对齐（**camelCase API → SQL 列** 在 **B9.2** 定稿） |
-| **`GET`** | **`/`** | 列表：**`offset`/`limit`**（同 B2）；**`{ list, total }`** |
-| **`GET`** | **`/:productId`** | 单条：库行或 **404** |
-| **`PUT`** | **`/:productId`** | **全量或 PATCH**（二选一写死）；**`product_id` 路径不可改**（改 id = **删+建**） |
-| **`DELETE`** | **`/:productId`** | **物理删**；注意 **`collection`** 级联；若产品要「软删」则 **B9.1** 增 **`deleted_at`** 迁移（**余量**） |
+| **`POST`** | **`/`** | **`INSERT`**；Body **camelCase** 校验与列归一见 **`lib/productWriteSchema.js`**（字段表见 **api.md §4.2.6**） |
+| **`GET`** | **`/`** | 列表：**`offset`/`limit`**（同 B2）；**`{ list, total }`**；排序 **`hot_rank ASC, product_id ASC`** |
+| **`GET`** | **`/:productId`** | 单条：**`{ product }`**；无行 **404** |
+| **`PUT`** | **`/:productId`** | **PATCH 语义**：Body 仅出现的字段覆盖；**路径 `product_id` 不可改**（改 id = **删+建**） |
+| **`DELETE`** | **`/:productId`** | **物理删**；注意 **`collection`** 级联；若产品要「软删」则增 **`deleted_at`** 迁移（**余量**） |
 
 **`product_id` 白名单**：与 **B5/B6** 一致 **`^[a-zA-Z0-9_-]{1,32}$`**。
 
-#### 9.9.4 与 `products.json` / `productsData` 的双源策略（必须二选一写进 B9.1）
+#### 9.9.4 与 `products.json` / `productsData` 的双源策略（**当前已选 S1**，契约见 [api.md](api.md) §4.2.6）
 
 | 策略 | 做法 | 适用 |
 |------|------|------|
-| **S1 · 库为准（验证端暂不切换）** | **B9** 只保证 **DB** 与 **B5 详情/收藏 FK** 正确；**改库后** 另跑 **`seed` 导出脚本** 或手工合并 **`products.json`**，再重启 **`server`** 以刷新 **`productsData`** | 当前仓库 **最小改动** |
+| **S1 · 库为准（验证端暂不切换）** | **B9** 只保证 **DB** 与 **B5 详情/收藏 FK** 正确；**改库后** 另跑 **`seed` 导出脚本** 或手工合并 **`products.json`**，再重启 **`server`** 以刷新 **`productsData`** | **当前仓库**（**已采用**） |
 | **S2 · 列表读库（后续迭代）** | **`recommendCore`** 商品源改为 **MySQL** 或 **DB+JSON 合并** | 工作量 **> B9 本体**，单列 **B9.10** 或 **B10 后** |
 
-**默认建议**：**S1** + 文档写明，避免未改 **`recommendCore`** 时出现「DB 有新 id、首页无卡片」。
+**注意**：**S1** 下若未同步 JSON，可能出现「**DB 有新 `product_id`、首页 `hot`/`personalized` 无卡**」——须文档化或走 **S2**。
 
 #### 9.9.5 鉴权（运营）
 
 | 层级 | 说明 |
 |------|------|
 | **基线** | 全部 **`requireAuth`**（**Bearer**） |
-| **运营** | **择一实现**：**①** JWT **`role: admin`** claim（B1 签发扩展）；**②** 环境变量 **`ZHILI_ADMIN_USER_IDS`**（逗号分隔 **`user.id`**）；**③** 暂允许 **凡登录用户可写**（仅 **dev** 文档声明 **禁止上生产**） |
+| **运营** | **择一实现**：**①** JWT **`role: admin`** claim（**`signUserToken(id, openid, { role: 'admin' })`**，登录默认不带）；**②** 环境变量 **`ZHILI_ADMIN_USER_IDS`**（逗号分隔 **`user.id`**）；**③** 仅本地 **`ZHILI_DEV_ADMIN_ANY_USER=1`**：**凡登录用户可写**（**禁止上生产**，启动 **warn**） |
 
 验收：**非运营** 调 **`/api/admin/products`** → **403** `FORBIDDEN`（或团队选的 **404** 隐藏存在性）。
 
@@ -739,19 +739,19 @@
 
 | 动作 | 建议 |
 |------|------|
-| **写/删商品** | **`invalidateProductDetailById(redis, productId)`**（已有 **B5.9**） |
+| **写/删商品** | **`invalidateProductDetailById(redis, productId)`**（**B5.9**；**B9** 在 **`PUT`/`DELETE`** 成功后调用；**`POST`** 不调用） |
 | **改 `hot_rank`/标签** | **可选** **`invalidateUserRecommendations`**（成本高，**B9.8 余量**）；或等 **B10** 压测再定 |
 
 #### 9.9.7 子任务与验收（WBS）
 
 | 子项 | 任务 | 要点与验收 | 依赖 |
 |------|------|------------|------|
-| **B9.1** | **契约冻结** | **[api.md](api.md)** **§4.2.6**：四方法、**Body 字段表**、**403/404/409**、**S1/S2** 选型；Postman **Admin Product** 文件夹；本文 **§9.9.0**。 | — |
-| **B9.2** | **`lib/productWriteSchema.js`（或并入 `productMapper`）** | **校验**：**`name`/`price`/JSON 数组长度**、`gender` 枚举与 **`scoring.js`** 一致；**`normalizeProductWriteBody` → SQL 列**。单测覆盖非法 **`price`**、非法 **`gender`**。 | B9.1 |
-| **B9.3** | **`routes/adminProduct.js`** | **`requireAuth`** + **`requireAdmin`（或等价）**；**`POST/GET/GET/:id/PUT/DELETE`**；**`LIMIT`/`OFFSET` 整数拼 SQL**（同 **§9.3.1**）。 | B9.2、B1.5 |
-| **B9.4** | **缓存失效** | **`PUT`/`DELETE`** 成功 **`commit`** 后调 **`invalidateProductDetailById`**；无 Redis 时 no-op。 | B9.3、B5 |
-| **B9.5** | **单测 `adminProduct.test.mjs`（或扩 `product.test.mjs`）** | mapper 逆变换、路由 mock **`execute`**；**403** 路径。 | B9.3 |
-| **B9.6** | **文档与篇首** | **README**「B9」自测；**prototype-spec** 表一行；**本文篇首**、**§9.1** B9 交付物。 | B9.5 |
+| **B9.1** | **契约冻结** | **[api.md](api.md)** **§4.2.6**：四方法、**Body 字段表**、**403/404/409**、**S1/S2** 选型；Postman **B9** 文件夹；本文 **§9.9.0**。**✅ 已落地** | — |
+| **B9.2** | **`lib/productWriteSchema.js`** | **校验**：**`title`/`price`/JSON 数组长度**、`gender` 枚举；归一 SQL 列。**✅ 已落地**（**`adminProduct.test.mjs`** 覆盖非法 **`price`**、**`gender`**） | B9.1 |
+| **B9.3** | **`routes/adminProduct.js`** | **`requireAuth`** + **`requireAdmin`**；**`POST/GET/GET/:id/PUT/DELETE`**；**`LIMIT`/`OFFSET` 整数拼 SQL**（同 **§9.3.1**）。**✅ 已落地** | B9.2、B1.5 |
+| **B9.4** | **缓存失效** | **`PUT`/`DELETE`** 成功后 **`invalidateProductDetailById`**；无 Redis 时 no-op。**✅ 已落地** | B9.3、B5 |
+| **B9.5** | **单测 `adminProduct.test.mjs`** | 校验与 **`isZhiliAdmin`**；**`auth.test.mjs`** 含 **`role: admin`** JWT。**✅ 已落地**（**HTTP 403** 路由单测仍为 **余量**） | B9.3 |
+| **B9.6** | **文档与篇首** | **README**「B9」自测；**本文篇首**、**§9.1**、**api.md**、Postman。**✅ 已落地**（**prototype-spec** 表行 **余量**） | B9.5 |
 | **B9.7** | **（余量）`products.json` 导出** | **`node scripts/export-product-to-json.mjs`** 或文档化 **mysqldump** 片段 | B9.3 |
 | **B9.8** | **（余量）推荐缓存** | 改 **`hot_rank`** 时是否 **`DEL recommend:*`** | B9.3、B4 |
 | **B9.9** | **（余量）审计列** | **`003_product_audit.sql`**：`updated_by` FK **`user.id`** | B0、B9.3 |
@@ -1042,4 +1042,4 @@ flowchart TB
 
 [prd_v0.md](prd_v0.md) · [plan0.md](plan0.md) · [prototype-spec.md](prototype-spec.md) · [api.md](api.md) · [prototype/README.md](prototype/README.md)
 
-**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4**、**§9.3.5** 与 **§9.5.3**。**B4** 实现 **`GET /api/recommend`、缓存 key、失效策略** 变更时同步 **§9.5**、**§8.3** 与 [api.md](api.md) **§8**（规划段落地后改已实现表）。**B5** 实现 **`GET /api/product/:id`、mapper、`resolve`、与 related 是否共源** 变更时同步 **§9.6.0**、[api.md](api.md) **§7 与新增详情节**、**§2 已实现表**、Postman。**B6** 实现 **`/api/favorite*`** 时同步 **§9.7.0**、篇首 API 行、[api.md](api.md) **§4.2.x（收藏专节）**、Postman。**B7** 实现 **`POST /api/event`** 或 **`collect` 双写** 时同步 **§9.8.0**、篇首、[api.md](api.md) **§4.2.5**（或已定编号）、**`index.js`/`collect` 行为**、[prototype-spec.md](prototype-spec.md) 埋点段、Postman。**B9** 实现 **`/api/admin/products*`** 时同步 **§9.9.0**、篇首、[api.md](api.md) **§4.2.6**、**§8**、Postman；**B8** 排期后移时在篇首「下一增量」与 **§9.1 B8** 行注明依赖 **B9**。
+**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4**、**§9.3.5** 与 **§9.5.3**。**B4** 实现 **`GET /api/recommend`、缓存 key、失效策略** 变更时同步 **§9.5**、**§8.3** 与 [api.md](api.md) **§8**（规划段落地后改已实现表）。**B5** 实现 **`GET /api/product/:id`、mapper、`resolve`、与 related 是否共源** 变更时同步 **§9.6.0**、[api.md](api.md) **§7 与新增详情节**、**§2 已实现表**、Postman。**B6** 实现 **`/api/favorite*`** 时同步 **§9.7.0**、篇首 API 行、[api.md](api.md) **§4.2.x（收藏专节）**、Postman。**B7** 实现 **`POST /api/event`** 或 **`collect` 双写** 时同步 **§9.8.0**、篇首、[api.md](api.md) **§4.2.5**（或已定编号）、**`index.js`/`collect` 行为**、[prototype-spec.md](prototype-spec.md) 埋点段、Postman。**B9** **`/api/admin/products*`** 已落地：后续变更须保持 **§9.9.0**、篇首、[api.md](api.md) **§4.2.6**、Postman 与 **`routes/adminProduct.js`** 行为一致；**B8** 排期后移时在篇首「下一增量」与 **§9.1 B8** 行注明依赖 **B9**。

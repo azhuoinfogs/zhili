@@ -15,8 +15,9 @@ export async function resolveProductById(id, productsData) {
     try {
       const rows = await query(
         `SELECT product_id, name, price, sell_point, occasion_keyword,
-                images, styles, occasions, interests, gender, age_bands, taboos_avoid, hot_rank, affiliate_url
-         FROM product WHERE product_id = ? LIMIT 1`,
+                images, styles, occasions, interests, gender, age_bands, taboos_avoid, hot_rank, affiliate_url,
+                COALESCE(listed, 1) AS listed
+         FROM product WHERE product_id = ? AND COALESCE(listed, 1) = 1 LIMIT 1`,
         [id]
       );
       if (rows.length) {

@@ -196,13 +196,29 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/admin/products` | 列表 **`{ list, total }`** |
-| `GET` | `/api/admin/products/:productId` | 单条 **`{ product }`** |
-| `POST` | `/api/admin/products` | 新建；**201** |
+| `GET` | `/api/admin/products` | 列表 **`{ list, total }`**；Query **`listed`**（`1`/`0`/`all`）、**`keyword`**（名称模糊） |
+| `GET` | `/api/admin/products/:productId` | 单条 **`{ product }`**（含 **`listed`** 上下架） |
+| `POST` | `/api/admin/products` | 新建；**201**；**`images` 至少 1 张** |
 | `PUT` | `/api/admin/products/:productId` | 部分字段更新；**200** |
 | `DELETE` | `/api/admin/products/:productId` | 物理删；**204** |
+| `POST` | `/api/admin/auth/login` | 运营后台密码登录 → **`{ token, admin }`**（需 **`ZHILI_ADMIN_CONSOLE_PASSWORD`**） |
+| `GET` | `/api/admin/stats/today` | 今日看板指标（与 **`event`** 表一致） |
+| `GET` | `/api/admin/stats/trend7d` | 近 7 日 DAU / 曝光 / 点击 / CTR |
+| `POST` | `/api/admin/upload/image` | **multipart** 字段 **`file`**；**201** **`{ url }`** |
 
-**自测**：在 **`server/.env`** 增加 **`ZHILI_DEV_ADMIN_ANY_USER=1`**（测完删除）→ Login → **`GET /api/admin/products?limit=5`** → **`POST /api/admin/products`**（Body 含 **`id`**、**`title`**、**`price`**）→ **`PUT`** 改 **`affiliateUrl`** → **`DELETE`** 清理。Postman 见 **`postman/zhili-prototype.postman_collection.json`** 文件夹 **B9**。
+**数据库**：执行 **`npm run migrate`** 会追加 **`003_product_listed.sql`**（`product.listed` 上架标记）；**`GET /api/product/:id`** 仅展示 **`listed=1`** 的库行。
+
+### B9 运营后台（`prototype/admin`）
+
+Vue 3 + Vite（默认 **http://127.0.0.1:5174**，`/api` 与 **`/uploads`** 代理到 API 服务）。**登录**：在 **`server/.env`** 配置 **`ZHILI_ADMIN_CONSOLE_PASSWORD`**（及可选 **`ZHILI_ADMIN_CONSOLE_USER_ID`**），浏览器打开后台 → 密码登录 → 签发带 **`role: admin`** 的 JWT。除 **`POST /api/admin/auth/login`** 外，**所有管理接口无 Bearer 一律 401**。
+
+```bash
+cd prototype/admin
+npm install
+npm run dev
+```
+
+**自测**：`migrate` → 配置 **`ZHILI_ADMIN_CONSOLE_PASSWORD`** → 启 **`server`** → 启 **`admin`** → 登录 → 商品列表筛选/分页 → 新增（含图片上传）→ 编辑 → 上下架 → 删除（二次确认）→ 数据看板与 **`SELECT * FROM event`** 对照。纯 API 自测仍可用 **`ZHILI_DEV_ADMIN_ANY_USER=1`** + Postman 文件夹 **B9**。
 
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 

@@ -15,10 +15,33 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireAdmin);
 
+const SELECT_ROW = `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
+              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url,
+              COALESCE(listed, 1) AS listed, created_at, updated_at`;
+
 function parsePaging(q) {
   const limit = Math.min(50, Math.max(1, parseInt(String(q?.limit ?? '20'), 10) || 20));
   const offset = Math.max(0, parseInt(String(q?.offset ?? '0'), 10) || 0);
   return { limit, offset };
+}
+
+function listFilter(q) {
+  const conds = [];
+  const params = [];
+  const listed = String(q?.listed ?? 'all').toLowerCase();
+  if (listed === '1' || listed === 'true' || listed === 'on') {
+    conds.push('COALESCE(listed, 1) = 1');
+  } else if (listed === '0' || listed === 'false' || listed === 'off') {
+    conds.push('COALESCE(listed, 1) = 0');
+  }
+  const kw = q?.keyword != null ? String(q.keyword).trim() : '';
+  const safeKw = kw.replace(/[%_\\]/g, '');
+  if (safeKw) {
+    conds.push('name LIKE ?');
+    params.push(`%${safeKw}%`);
+  }
+  const where = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
+  return { where, params };
 }
 
 function isDupKeyError(e) {
@@ -33,13 +56,13 @@ router.get('/', async (req, res) => {
   const { limit, offset } = parsePaging(req.query);
   const lim = Math.trunc(limit);
   const off = Math.trunc(offset);
+  const { where, params } = listFilter(req.query);
   try {
-    const countRows = await query('SELECT COUNT(*) AS c FROM product');
+    const countRows = await query(`SELECT COUNT(*) AS c FROM product ${where}`, params);
     const total = Number(countRows[0]?.c ?? 0);
     const rows = await query(
-      `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
-              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url, created_at, updated_at
-       FROM product ORDER BY hot_rank ASC, product_id ASC LIMIT ${lim} OFFSET ${off}`
+      `${SELECT_ROW} FROM product ${where} ORDER BY hot_rank ASC, product_id ASC LIMIT ${lim} OFFSET ${off}`,
+      params
     );
     res.json({ list: rows.map(rowToAdminProduct), total });
   } catch (e) {
@@ -58,12 +81,7 @@ router.get('/:productId', async (req, res) => {
     return;
   }
   try {
-    const rows = await query(
-      `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
-              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url, created_at, updated_at
-       FROM product WHERE product_id = ? LIMIT 1`,
-      [productId]
-    );
+    const rows = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [productId]);
     if (!rows.length) {
       res.status(404).json({ error: 'NOT_FOUND', message: '商品不存在' });
       return;
@@ -90,8 +108,8 @@ router.post('/', async (req, res) => {
       `INSERT INTO product (
         product_id, name, price, sell_point, occasion_keyword,
         images, styles, occasions, interests, gender, age_bands, taboos_avoid,
-        hot_rank, click_count, affiliate_url
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        hot_rank, click_count, affiliate_url, listed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         d.productId,
         d.name,
@@ -108,14 +126,10 @@ router.post('/', async (req, res) => {
         d.hotRank,
         d.clickCount,
         d.affiliateUrl,
+        d.listedDb,
       ]
     );
-    const rows = await query(
-      `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
-              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url, created_at, updated_at
-       FROM product WHERE product_id = ? LIMIT 1`,
-      [d.productId]
-    );
+    const rows = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [d.productId]);
     res.status(201).json({ product: rowToAdminProduct(rows[0]) });
   } catch (e) {
     if (isDupKeyError(e)) {
@@ -137,12 +151,7 @@ router.put('/:productId', async (req, res) => {
     return;
   }
   try {
-    const rows = await query(
-      `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
-              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url, created_at, updated_at
-       FROM product WHERE product_id = ? LIMIT 1`,
-      [productId]
-    );
+    const rows = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [productId]);
     if (!rows.length) {
       res.status(404).json({ error: 'NOT_FOUND', message: '商品不存在' });
       return;
@@ -158,7 +167,7 @@ router.put('/:productId', async (req, res) => {
         name = ?, price = ?, sell_point = ?, occasion_keyword = ?,
         images = ?, styles = ?, occasions = ?, interests = ?,
         gender = ?, age_bands = ?, taboos_avoid = ?, hot_rank = ?,
-        click_count = ?, affiliate_url = ?
+        click_count = ?, affiliate_url = ?, listed = ?
       WHERE product_id = ?`,
       [
         d.name,
@@ -175,16 +184,12 @@ router.put('/:productId', async (req, res) => {
         d.hotRank,
         d.clickCount,
         d.affiliateUrl,
+        d.listedDb,
         d.productId,
       ]
     );
     await invalidateProductDetailById(getRedis(), productId);
-    const out = await query(
-      `SELECT product_id, name, price, sell_point, occasion_keyword, images, styles, occasions, interests,
-              gender, age_bands, taboos_avoid, hot_rank, click_count, affiliate_url, created_at, updated_at
-       FROM product WHERE product_id = ? LIMIT 1`,
-      [productId]
-    );
+    const out = await query(`${SELECT_ROW} FROM product WHERE product_id = ? LIMIT 1`, [productId]);
     res.json({ product: rowToAdminProduct(out[0]) });
   } catch (e) {
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });

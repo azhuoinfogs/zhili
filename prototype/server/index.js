@@ -12,6 +12,9 @@ import productRouter from './routes/product.js';
 import favoriteRouter from './routes/favorite.js';
 import eventRouter from './routes/event.js';
 import adminProductRouter from './routes/adminProduct.js';
+import adminAuthRouter from './routes/adminAuth.js';
+import adminStatsRouter from './routes/adminStats.js';
+import adminUploadRouter from './routes/adminUpload.js';
 import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
@@ -66,6 +69,10 @@ const csvFile = path.join(dataDir, 'events.csv');
 app.use(cors());
 app.use(express.json({ limit: '256kb' }));
 
+app.use('/api/admin/auth', adminAuthRouter);
+app.use('/api/admin/stats', adminStatsRouter);
+app.use('/api/admin/upload', adminUploadRouter);
+
 app.use('/api/user', userRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/recommend', recommendRouter);
@@ -75,6 +82,9 @@ app.use('/api/event', eventRouter);
 app.use('/api/admin/products', adminProductRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const uploadsDir = path.join(dataDir, 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/hot', (req, res) => {
   const q = req.query || {};
@@ -260,6 +270,13 @@ async function startServer() {
     await initRedis();
   } catch (error) {
     console.warn('[知礼 MVP] Redis 连接失败，将使用内存缓存降级:', error.message);
+  }
+
+  if (!String(process.env.ZHILI_ADMIN_CONSOLE_PASSWORD || '').trim()) {
+    console.warn(
+      '[知礼] 未设置 ZHILI_ADMIN_CONSOLE_PASSWORD，运营后台密码登录不可用（503）。' +
+        '请在 prototype/server/.env 中配置后重启（参考 .env.example）。'
+    );
   }
 
   console.log('[知礼 MVP] 启动服务...');

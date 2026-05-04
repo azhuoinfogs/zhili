@@ -55,6 +55,10 @@
 | `POST` | `/api/admin/products` | **B9**：新建 **`product`**；Bearer |
 | `PUT` | `/api/admin/products/:productId` | **B9**：部分更新；写后清详情缓存；Bearer |
 | `DELETE` | `/api/admin/products/:productId` | **B9**：物理删；写后清详情缓存；Bearer |
+| `POST` | `/api/admin/auth/login` | **B9 后台**：运营密码登录，**无 Bearer**；成功返回 **`{ token, admin, expires_in }`** |
+| `GET` | `/api/admin/stats/today` | **B9 看板**：今日事件量、DAU、曝光、点击、CTR（**`event` 表**）；Bearer + 运营 |
+| `GET` | `/api/admin/stats/trend7d` | **B9 看板**：近 7 日按日 DAU 与 CTR；Bearer + 运营 |
+| `POST` | `/api/admin/upload/image` | **B9**：**multipart** 字段 **`file`**（≤5MB）；**201** **`{ url, filename }`**；静态 **`GET /uploads/...`**；Bearer + 运营 |
 
 > H5 仍可用 **`localStorage.zhili_profile`** 直传 **`/api/personalized`**；与 **`/api/profile`** 服务端持久化可并行存在。
 
@@ -330,22 +334,22 @@
 | 方式 | 说明 |
 |------|------|
 | **`ZHILI_ADMIN_USER_IDS`** | 逗号分隔 **`user.id`**（数字），与 **`GET /api/user/me`** 的 `user.id` 一致 |
-| **JWT `role: admin`** | 签发示例：`signUserToken(userId, openid, { role: 'admin' })`（登录接口默认不带 `role`，需自建 token 或后续扩展登录） |
+| **JWT `role: admin`** | 签发示例：`signUserToken(userId, openid, { role: 'admin' })`；**`POST /api/admin/auth/login`** 在配置 **`ZHILI_ADMIN_CONSOLE_PASSWORD`** 成功后直接签发带 **`role: admin`** 的 token（与 **`prototype/admin`** 配套） |
 | **仅本地** **`ZHILI_DEV_ADMIN_ANY_USER=1`** | 任意登录用户可写；**禁止上生产**；启动时会 **warn** |
 
-非运营：**403** `FORBIDDEN`。无 DB：**503** `DB_UNAVAILABLE`。
+非运营：**403** `FORBIDDEN`。无 DB：**503** `DB_UNAVAILABLE`。除 **`POST /api/admin/auth/login`** 外，**`/api/admin/*`** 无 **`Authorization: Bearer`** → **401** `UNAUTHORIZED`。
 
 **`product_id` 白名单**：与 B5/B6 一致 **`^[a-zA-Z0-9_-]{1,32}$`**。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `GET` | `/api/admin/products` | 列表；Query **`limit`**（1～50，默认 20）、**`offset`**（≥0）；**`{ list, total }`**；排序 `hot_rank ASC, product_id ASC` |
+| `GET` | `/api/admin/products` | 列表；Query **`limit`**、**`offset`**；**`listed`**=`1`/`0`/`all`（上架筛选）；**`keyword`**（`name` 模糊）；**`{ list, total }`**；排序 `hot_rank ASC, product_id ASC` |
 | `GET` | `/api/admin/products/:productId` | 单条 **`{ product }`**；无行 **404** `NOT_FOUND` |
 | `POST` | `/api/admin/products` | **201** **`{ product }`**；**409** `CONFLICT`（`product_id` 重复） |
 | `PUT` | `/api/admin/products/:productId` | **JSON 部分更新（PATCH 语义）**：仅出现的字段覆盖；**不可改路径 `product_id`**；成功 **200**；**`invalidateProductDetailById`** |
 | `DELETE` | `/api/admin/products/:productId` | **物理删**（`collection` 外键 **CASCADE**）；成功 **204** 无 Body；**`invalidateProductDetailById`** |
 
-**列表/单条 `product` 对象**（camelCase，与 `products.json` 项对齐）：`productId`、`title`、`price`、`sellPoint`、`occasionKeyword`、`images`、`styles`、`occasions`、`interests`、`gender`（**`male`/`female`/`any`/`unknown`**，与打分侧 **`any`** 一致）、`ageBands`、`taboosAvoid`、`hotRank`、`affiliateUrl`（可 `null`）、`clickCount`、`createdAt`、`updatedAt`（ISO8601）。
+**列表/单条 `product` 对象**（camelCase，与 `products.json` 项对齐）：`productId`、`title`、`price`、`sellPoint`、`occasionKeyword`、`images`、`styles`、`occasions`、`interests`、`gender`（**`male`/`female`/`any`/`unknown`**，与打分侧 **`any`** 一致）、`ageBands`、`taboosAvoid`、`hotRank`、`affiliateUrl`（可 `null`）、**`listed`**（**boolean**，上下架）、`clickCount`、`createdAt`、`updatedAt`（ISO8601）。**`GET /api/product/:id`（B5）** 库行仅 **`listed=true`** 时命中 DB，否则回退 **`products.json`**。
 
 **`POST` Body**（JSON）：
 
@@ -356,7 +360,8 @@
 | `price` | 是 | 非负数，上限 `1e9` |
 | `gender` | 否 | 默认 **`any`**（存库为 **`unknown`**，与 seed 一致） |
 | `sellPoint`、`occasionKeyword` | 否 | 默认空串 |
-| `images` | 否 | 字符串数组，≤**6** 项 |
+| `images` | **是** | 字符串数组，**至少 1** 项，≤**6** 项 |
+| `listed` | 否 | 默认 **上架**；**`false`** 表示下架 |
 | `styles`、`occasions`、`interests`、`ageBands`、`taboosAvoid` | 否 | 各 ≤**24** 项 |
 | `hotRank` | 否 | 默认 **999** |
 | `clickCount` | 否 | 默认 **0** |
@@ -366,7 +371,7 @@
 
 **错误码摘要**：`400` `BAD_REQUEST` / `INVALID_ENUM`；`403` `FORBIDDEN`；`404` `NOT_FOUND`；`409` `CONFLICT`；`503` `DB_UNAVAILABLE`。
 
-**实现**：**`routes/adminProduct.js`**；**`middleware/requireAdmin.js`**、**`lib/adminAccess.js`**、**`lib/productWriteSchema.js`**。
+**实现**：**`routes/adminProduct.js`**、**`routes/adminAuth.js`**、**`routes/adminStats.js`**、**`routes/adminUpload.js`**；**`middleware/requireAdmin.js`**、**`lib/adminAccess.js`**、**`lib/productWriteSchema.js`**；迁移 **`003_product_listed.sql`**（`npm run migrate`）。
 
 **写后**：**`invalidateProductDetailById`**（B5.9）；与 **`products.json`/`productsData` 双源`** 策略见 develop2 **§9.9.4**（默认 **S1**：改库后首页仍读 JSON，需同步或 **S2** 迭代）。
 
@@ -523,6 +528,10 @@
 | `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4/**B5** 复用） |
 | `prototype/server/routes/product.js` | **B5**：**`GET /api/product/:id`** |
 | `prototype/server/routes/adminProduct.js` | **B9**：**`/api/admin/products`** CRUD |
+| `prototype/server/routes/adminAuth.js` | **B9**：**`POST /api/admin/auth/login`** |
+| `prototype/server/routes/adminStats.js` | **B9**：**`/api/admin/stats/*`** 看板 |
+| `prototype/server/routes/adminUpload.js` | **B9**：**`POST /api/admin/upload/image`** |
+| `prototype/admin/` | **B9**：运营后台 Vue（`npm run dev`） |
 | `prototype/server/middleware/requireAdmin.js` | **B9**：运营鉴权（在 **`requireAuth`** 之后） |
 | `prototype/server/lib/adminAccess.js` | **B9**：**`ZHILI_ADMIN_USER_IDS`** / **`role: admin`** / 本地 dev bypass |
 | `prototype/server/lib/productWriteSchema.js` | **B9**：写 Body 校验、**`rowToAdminProduct`** |
@@ -662,4 +671,4 @@ if (pm.response.code === 200) {
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`** + **B7** **`POST /api/event`** / **`collect` 双写** + **B9** **`/api/admin/products*`**；**§8** 仅剩 **B8** 规划；Redis 可降级）；`develop.md` / `develop1.md` 已废止。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`** + **B6** **`/api/favorite*`** + **B7** **`POST /api/event`** / **`collect` 双写** + **B9** **`/api/admin/*`**（含 **`prototype/admin`** 后台）；**§8** 仅剩 **B8** 规划；Redis 可降级）；`develop.md` / `develop1.md` 已废止。
