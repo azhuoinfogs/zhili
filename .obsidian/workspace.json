@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "develop2.md",
+                "file": "develop3.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "develop2"
+              "title": "develop3"
             }
           }
         ]
@@ -185,6 +185,10 @@
   },
   "active": "9477fb9291d28cc7",
   "lastOpenFiles": [
+    "prd_v0.md",
+    "develop3.md",
+    "develop2.md",
+    "prototype/mp-weixin/ACCEPTANCE.md",
     "prototype/server/node_modules/multer/storage/disk.js",
     "prototype/server/node_modules/multer/storage/memory.js",
     "prototype/server/node_modules/multer/lib/remove-uploaded-files.js",
@@ -196,9 +200,6 @@
     "prototype/server/node_modules/multer/LICENSE",
     "prototype/server/node_modules/multer/README.md",
     "prototype/server/node_modules/multer/lib",
-    "prototype/server/node_modules/multer/package.json",
-    "prd_v0.md",
-    "develop2.md",
     "prototype/server/data/uploads/1777890305021-bdkbcqdl.PNG",
     "prototype/server/data/uploads/1777889863026-h2xx4pcz.PNG",
     "prototype/admin/node_modules/@vue/shared/README.md",
@@ -221,7 +222,6 @@
     "prototype/admin/node_modules/@babel/parser/CHANGELOG.md",
     "prototype/admin/node_modules/@babel/helper-validator-identifier/README.md",
     "prototype/admin/node_modules/@babel/helper-string-parser/README.md",
-    "prototype/admin/node_modules/@jridgewell/sourcemap-codec/README.md",
-    "prototype/admin/node_modules/@esbuild/win32-x64/README.md"
+    "prototype/admin/node_modules/@jridgewell/sourcemap-codec/README.md"
   ]
 }

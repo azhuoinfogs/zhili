@@ -1,34 +1,57 @@
 # 知礼 · 整合开发计划（develop2）
 
+<a id="sec-top"></a>
+
 **版本**：v3.0  
 **更新**：2026-05-04（**develop2 与仓库同步**：**§9.3.5**/**§9.9**；**B9** 含 **`prototype/admin`** 运营后台 SPA、**`POST /api/admin/auth/login`**（**`ZHILI_ADMIN_CONSOLE_PASSWORD`**）、**`/api/admin/stats/*`**、**`POST /api/admin/upload/image`**；**`003_product_listed.sql`**（**`product.listed`**）；**MySQL 连通时** **`/api/hot`**、**`/api/personalized`**、**`GET /api/recommend`**、**`GET /api/user/recommend`**、**`GET /api/related/:id`** 商品池与 **`resolveProductById`** 以 **已上架 DB 行为准**（删/下架后不回退 **`products.json`**）；**B9 写商品**后 **`invalidateAllRecommendations`**；**B8** 联盟后移；[api.md](api.md) **§4.2.6**；**小程序**：[prototype/mp-weixin/README.md](prototype/mp-weixin/README.md) **「小程序开发步骤（明确版）」**（**阶段一** 1–12 步：环境 → 启 API → 配 `apiBase`/`appid` → 导入 → 域名校验选项 → 验证路径；另含阶段二/三索引））  
 **状态**：待评审（仓库 **B0 + B1 + B2 + B3 + B4 + B5 + B6 + B7 + B9（API+后台）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
 
+## 快速索引
+
+> **两套「B1～B6」**：**§9.1** 表为 **后端里程碑**；**附录 A §三「阶段 B」** 表为 **PRD 分项**。对照见 [prototype/mp-weixin/ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)。
+
+| 区块                                            | 锚点                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **文顶**（标题、版本、更新、状态）                           | [#sec-top](#sec-top)                                                                                   |
+| **篇首**：仓库快照表、本地运行、下一增量                        | [#sec-overview](#sec-overview)                                                                         |
+| **§0** 文档关系（api / spec / 小程序 README）          | [#sec-0](#sec-0)                                                                                       |
+| **§1～§3** develop1 勘误 · 能力缺口 · plan0 前置验证     | [#sec-1](#sec-1) · [#sec-2](#sec-2) · [#sec-3](#sec-3)                                                 |
+| **§4～§8** 范围 · 技术 · 库表 · API 映射 · 算法与缓存       | [#sec-4](#sec-4) · [#sec-5](#sec-5) · [#sec-6](#sec-6) · [#sec-7](#sec-7) · [#sec-8](#sec-8)           |
+| **§9** 开发任务与 **§9.1～§9.9**（B1 登录、B2 画像…B9 后台） | [#sec-9](#sec-9)                                                                                       |
+| **§10～§14** 打标 · 验收 · 发布灰度 · 风险 · 里程碑         | [#sec-10](#sec-10) · [#sec-11](#sec-11) · [#sec-12](#sec-12) · [#sec-13](#sec-13) · [#sec-14](#sec-14) |
+| **§15～§16** H5 阶段 A · develop1 历史附录索引         | [#sec-15](#sec-15) · [#sec-16](#sec-16)                                                                |
+| **附录 A** PRD 分项与阶段 A–E（含 **§三** 小程序排期）        | [#sec-appendix-a](#sec-appendix-a)                                                                     |
+| **§17** 文档索引                                  | [#sec-17](#sec-17)                                                                                     |
+
 ---
+
+<a id="sec-overview"></a>
 
 ## 当前开发状态（仓库快照 · 与代码同步）
 
 > 以下与 `prototype/` 当前提交一致；**未在仓库内自动探测**的项（如是否已跑满实验、是否已出报告）标为 **外部依赖**。
 
-| 域 | 状态 | 说明 |
-|----|------|------|
-| **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、**`GET /api/product/:id`（B5）**、**`POST/DELETE /api/favorite`、`GET /api/favorite/list`（B6）**、**`POST /api/event`（B7）**、**`GET/POST/PUT/DELETE /api/admin/products*`（B9）**、**`POST /api/admin/auth/login`**、**`GET /api/admin/stats/today` / `trend7d`**、**`POST /api/admin/upload/image`**、`POST /api/collect`（可选 **`EVENT_DB_DUAL_WRITE`** 写 **`event`**）、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**；**B4**：**`GET /api/recommend`**（**`page`/`size`** + **Redis** 可降级，**Bearer**）；**B5**：详情 **可选 Bearer** + **`profile` Query** + 详情 **Redis** 可降级；**B6**：收藏 **Bearer** + **`collection`**；**B7**：**`event` 表** + **可选 Bearer**；**B9**：商品写 + 后台登录/看板/上传；**除登录外**管理接口 **Bearer** + **运营鉴权**（见 **§9.9.5**）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1～§4.2.6、§4.3、§10**；B2 自测见本文 **§9.3.4** |
-| **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条**（**`seed` 灌库**）；**DB 连通时** 推荐/热门/关联/详情解析以 **`product` 表已上架行** 为主（**`lib/productCatalog.js`**、**`lib/productResolve.js`**） |
-| **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
-| **小程序骨架** | **已具备** | `prototype/mp-weixin`：**`landing` → `tags` → `browse` → `detail`**（与 `prototype/client` 阶段流及 **hot/personalized/product/related/collect** 对齐）；`app.json` 导航栏已用 PRD §5.2 主色占位。**阶段 B 验收映射**：[prototype/mp-weixin/ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)。**导入、联调、`apiBase` 与端口、Network/Storage 排错、真机注意**：见 [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md) **「小程序开发步骤（明确版）」**（**阶段一** 步骤表）；[prototype/README.md](prototype/README.md) 小程序节有入口链接 |
-| **阶段 A（H5）** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐（排期见附录 A §三） |
-| **MVP 后端（B0～）** | **B0+B1+B2+B3+B4+B5+B6+B7+B9（主路径）已具备** | **B0～B9** 同前（略）。**运营后台**：**`prototype/admin`**（Vue3+Vite，默认 **5174**，代理 **`/api`**、**`/uploads`**）。**B8（联盟 `GET /api/purchase/url`）**：**排期后移**至 **B10 相关验收之后**（见 **§9.1 B8**、**§13**）；**`affiliate_url`** 已由 **B9** 维护 |
-| **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
-| **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
+| 域                    | 状态                                     | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **H5 验证端**           | **已具备**                                | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| **API**              | **已具备**                                | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、**`GET /api/product/:id`（B5）**、**`POST/DELETE /api/favorite`、`GET /api/favorite/list`（B6）**、**`POST /api/event`（B7）**、**`GET/POST/PUT/DELETE /api/admin/products*`（B9）**、**`POST /api/admin/auth/login`**、**`GET /api/admin/stats/today` / `trend7d`**、**`POST /api/admin/upload/image`**、`POST /api/collect`（可选 **`EVENT_DB_DUAL_WRITE`** 写 **`event`**）、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**；**B4**：**`GET /api/recommend`**（**`page`/`size`** + **Redis** 可降级，**Bearer**）；**B5**：详情 **可选 Bearer** + **`profile` Query** + 详情 **Redis** 可降级；**B6**：收藏 **Bearer** + **`collection`**；**B7**：**`event` 表** + **可选 Bearer**；**B9**：商品写 + 后台登录/看板/上传；**除登录外**管理接口 **Bearer** + **运营鉴权**（见 **§9.9.5**）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1～§4.2.6、§4.3、§10**；B2 自测见本文 **§9.3.4** |
+| **算法与数据**            | **已具备**                                | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条**（**`seed` 灌库**）；**DB 连通时** 推荐/热门/关联/详情解析以 **`product` 表已上架行** 为主（**`lib/productCatalog.js`**、**`lib/productResolve.js`**）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| **埋点落盘**             | **已具备**                                | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| **小程序骨架**            | **已具备**                                | `prototype/mp-weixin`：**`landing` → `tags` → `browse` → `detail`**（与 `prototype/client` 阶段流及 **hot/personalized/product/related/collect** 对齐）；`app.json` 导航栏已用 PRD §5.2 主色占位。**阶段 B 验收映射**：[prototype/mp-weixin/ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)。**导入、联调、`apiBase` 与端口、Network/Storage 排错、真机注意**：见 [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md) **「小程序开发步骤（明确版）」**（**阶段一** 步骤表）；[prototype/README.md](prototype/README.md) 小程序节有入口链接                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **阶段 A（H5）**         | **已在 H5 落地**                           | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；**小程序**：**`landing`→`tags`→`browse`→`detail`** 已对齐 **F2/F3 主干**（顶筛 **500ms 防抖**、**下拉刷新**/**触底分页**、`pull_refresh`、`GET /api/product`/`/api/related`、`POST /api/collect`）；与 H5 的余量主要有 **空状态 SVG 插画**、**骨架屏**、**`impression` 策略** 等；**§9.1 后端里程碑**（如 **B1 登录、`/api/favorite*`**）接线见 [prototype/mp-weixin/ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)。**附录 A §三「阶段 B」表内 B1～B6** 为 **PRD 分项编号**，与 **§9.1 后端 B1～B6** 不同义，勿混。                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **MVP 后端（B0～）**      | **B0+B1+B2+B3+B4+B5+B6+B7+B9（主路径）已具备** | **B0～B9** 同前（略）。**运营后台**：**`prototype/admin`**（Vue3+Vite，默认 **5174**，代理 **`/api`**、**`/uploads`**）。**B8（联盟 `GET /api/purchase/url`）**：**排期后移**至 **B10 相关验收之后**（见 **§9.1 B8**、**§13**）；**`affiliate_url`** 已由 **B9** 维护                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **本机 Docker（B0 配套）** | **已具备**                                | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| **实验与决策门**           | **外部依赖**                               | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 **本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`；**运营后台**再 **`cd prototype/admin && npm run dev`**；**若用 Docker MySQL/Redis**，先在该 README 完成 compose 与 `npm run dev:db`，保证 `server/.env` 中 **`DB_PASSWORD` 与 `MYSQL_ROOT_PASSWORD` 一致**；改密后旧卷需 `docker:mysql-fresh` 或手动 `ALTER USER`）。**后台登录**：`server/.env` 配置 **`ZHILI_ADMIN_CONSOLE_PASSWORD`**（及可选 **`ZHILI_ADMIN_CONSOLE_USER_ID`**、**`PUBLIC_BASE_URL`**），见 **`server/.env.example`**。**微信小程序**：导入后按 **[prototype/mp-weixin/README.md](prototype/mp-weixin/README.md)「小程序开发步骤（明确版）」** 的 **阶段一（1–12 步）** 执行；与附录 A **§三 阶段 B** 产品任务表并列（前者 **工程跑通**，后者 **PRD 验收**）。
 
 **下一增量（与 §9.1 顺序一致）**：**B3/B4 收尾**（§9.4.0、§9.5.0 余量）→ **B10** 联调硬化（与 **B9** 契约对齐）→ **B8** 联盟转链（**后移**）。（**B1～B7、B9 主链已落地**。）
 
 ---
+
+<a id="sec-0"></a>
 
 ## 0. 文档关系
 
@@ -37,40 +60,46 @@
 | **develop2.md（本文）** | 整合：验证门 + MVP 全量结构（范围/技术/库表/API/任务/验收/灰度/风险）+ `prototype` 勘误与映射；**附录 A** 为 PRD 分项与阶段 A–E |
 | [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **§4.2.1**；**B4** **`GET /api/recommend`** **§4.2.2**；**B9** **`/api/admin/*`**（商品、**`auth/login`**、**`stats/*`**、**`upload/image`**）**§4.2.6**；Redis 约定 **§8.3**；Postman **§10** |
 | [prototype-spec.md](prototype-spec.md) | 当前验证端工程与埋点事实 |
-| [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md) | 微信小程序：**「小程序开发步骤（明确版）」**（阶段一 1–12、常见失败、真机、PRD 扩展顺序表）；与附录 A **§三 阶段 B** 配合 |
+| [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md) | 微信小程序：**「小程序开发步骤（明确版）」**（阶段一 1–12、常见失败、真机、PRD 扩展顺序表）；**§9.1 ↔ 附录 A PRD「阶段 B」两套 B 编号**：见 [ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md) 开篇说明 |
 
 > 原 `develop.md`、`develop1.md` 已废止；SQL 与迁移以 **`prototype/server/migrations/*.sql`** 与本文 **§6** 为准，需追溯全文可查 Git 历史。
 
 ---
 
+<a id="sec-1"></a>
+
 ## 1. develop1 与当前仓库（prototype）勘误
 
-| develop1 表述 | 仓库事实 |
-|---------------|----------|
-| 前端 Vue3 CDN + Vant，部署 Vercel/Netlify | **Vue 3 + Vite**，`prototype/client`；本地/自建部署为主 |
-| A 组「随机排序」/ 随机 | **`GET /api/hot` 按 `hotRank` 稳定排序** |
-| B 组「前端打分」 | **`prototype/server/scoring.js`** + **`POST /api/personalized`** |
-| sendBeacon / Google 表单 | **`fetch` → `POST /api/collect`** → `server/data/events.jsonl` |
-| 匿名 `user_id` | **`zhili_vid`**；分组 **`zhili_group`**；画像 **`zhili_profile`** |
-| 埋点事件 6 类 | 另含 **`explore_click`**；字段名见 prototype-spec §5 |
-| 后端 Nest.js + TS | 验证端为 **Express + JS**；MVP 可按 develop1 升级为 Nest |
-| `user_profile.budget_max` decimal | 验证端为 **预算档位枚举**（如 `100-300`），与 PRD / `personalized` body 一致 |
-| `relation` 等中文 enum | `products.json` / API 使用 **英文 key**（如 `friend`），上线迁移需对照表 |
-| 验证「2–3 天」总成本 | develop1 §0.2 阶段表含 **招募 2–3 天**；总周期以 **表内合计** 为准，勿压缩样本 |
+| develop1 表述                          | 仓库事实                                                             |
+| ------------------------------------ | ---------------------------------------------------------------- |
+| 前端 Vue3 CDN + Vant，部署 Vercel/Netlify | **Vue 3 + Vite**，`prototype/client`；本地/自建部署为主                    |
+| A 组「随机排序」/ 随机                        | **`GET /api/hot` 按 `hotRank` 稳定排序**                              |
+| B 组「前端打分」                            | **`prototype/server/scoring.js`** + **`POST /api/personalized`** |
+| sendBeacon / Google 表单               | **`fetch` → `POST /api/collect`** → `server/data/events.jsonl`   |
+| 匿名 `user_id`                         | **`zhili_vid`**；分组 **`zhili_group`**；画像 **`zhili_profile`**      |
+| 埋点事件 6 类                             | 另含 **`explore_click`**；字段名见 prototype-spec §5                    |
+| 后端 Nest.js + TS                      | 验证端为 **Express + JS**；MVP 可按 develop1 升级为 Nest                   |
+| `user_profile.budget_max` decimal    | 验证端为 **预算档位枚举**（如 `100-300`），与 PRD / `personalized` body 一致      |
+| `relation` 等中文 enum                  | `products.json` / API 使用 **英文 key**（如 `friend`），上线迁移需对照表         |
+| 验证「2–3 天」总成本                         | develop1 §0.2 阶段表含 **招募 2–3 天**；总周期以 **表内合计** 为准，勿压缩样本           |
 
 ---
+
+<a id="sec-2"></a>
 
 ## 2. 能力与缺口明细（对照 §「当前开发状态」）
 
 | 模块      | 已实现                                                                                                                              | 仍为缺口                                                                  |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | H5      | 同快照表                                                                                                                             | 多画像、微信登录；**收藏列表与 B6 服务端 API 的 H5 全量接线**（后端 **`/api/favorite*`** 已具备）  |
-| API     | 同快照表                                                                                                                             | **收藏（B6）**、**埋点入库（B7）**、**商品写 + 后台登录/看板/上传（B9）** 已具备；**联盟 B8（后移）** 仍待 |
+| API     | 同快照表                                                                                                                             | **联盟 B8（后移）** 仍待；**§9.1** 主链（登录/画像/推荐/详情/收藏/事件/管理）见篇首 **API** 行 **已具备** |
 | 数据      | **200** 条商品 JSON；API 返回 `images[]`；**Docker 下可** `seed` 落 **`product` 表**；**`003`** 追加 **`listed`**（上下架）；**DB 连通时** H5 列表与详情与库一致 | 联盟字段；**线上**仍以 develop1 数据层为准                                          |
-| 小程序     | 三页 + PRD 色顶栏                                                                                                                     | WeUI 全量、登录、与 H5 同等交互、埋点全量                                             |
+| 小程序     | **四页流**（`landing`→`tags`→`browse`→`detail`）+ PRD **深色**顶栏；**hot / personalized / product / related / collect** 与 `prototype/client` 对齐（方案 B） | **WeUI** 全量、**`wx.login` + Bearer**、**`/api/favorite*`**、与 H5 **空状态 SVG / 骨架屏** 同级 polish；对照 [ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md) |
 | 后台 / 联盟 | **验证端**：**`prototype/admin`** + **`/api/admin/*`**（见 **§9.9**）                                                                   | develop1 §3.2、CPS；**本机** MySQL/Redis 已由 Docker 编排覆盖，**不等同**生产托管与联盟    |
 
 ---
+
+<a id="sec-3"></a>
 
 ## 3. 前置验证（develop1 §0 + plan0 门控）
 
@@ -101,6 +130,8 @@
 
 ---
 
+<a id="sec-4"></a>
+
 ## 4. 项目范围（develop1 §1）
 
 ### 4.1 核心目标
@@ -121,6 +152,8 @@
 
 ---
 
+<a id="sec-5"></a>
+
 ## 5. 技术选型（develop1 §2 + 验证期对照）
 
 | 层 | develop1（MVP 目标） | 当前验证端 |
@@ -133,6 +166,8 @@
 | 埋点 | 自定义 + 微信分析 | **自建 collect** |
 
 ---
+
+<a id="sec-6"></a>
 
 ## 6. develop1 MVP 后端 — 数据库与字段对齐
 
@@ -173,6 +208,8 @@
 
 ---
 
+<a id="sec-7"></a>
+
 ## 7. develop1 API 与验证端网关对齐
 
 ### 7.1 路径冲突（强制约定）
@@ -204,6 +241,8 @@
 
 ---
 
+<a id="sec-8"></a>
+
 ## 8. 推荐算法、理由与缓存（develop1 §6）
 
 | develop1 条款 | 对齐说明 |
@@ -217,6 +256,8 @@
 **B4 落地时**：以上 key/TTL/失效/降级须与 **§9.5** 子任务 **B4.3～B4.7** 写进实现与单测，避免与 **§9.5.2** 边界冲突。
 
 ---
+
+<a id="sec-9"></a>
 
 ## 9. 开发任务分解（develop1 §7）
 
@@ -797,6 +838,8 @@
 
 ---
 
+<a id="sec-10"></a>
+
 ## 10. 商品打标与初始化（develop1 §8）
 
 1. 联盟抓取目标 **200** 品（develop1）；验证期可 **脚本生成 + 抽检**，与 PRD 商品池策略一致。  
@@ -804,6 +847,8 @@
 3. **标签体系**见 develop1 §8.2 表（基础/兴趣/情境/禁忌）；与 `products.json` 字段设计对齐扩展即可。
 
 ---
+
+<a id="sec-11"></a>
 
 ## 11. 验收标准（develop1 §9）
 
@@ -830,6 +875,8 @@
 
 ---
 
+<a id="sec-12"></a>
+
 ## 12. 发布与灰度（develop1 §10）
 
 | 环境 | 用途 | develop1 示例域名 |
@@ -844,6 +891,8 @@
 
 ---
 
+<a id="sec-13"></a>
+
 ## 13. 风险与应对（develop1 §11）
 
 | 风险 | 概率 | 应对 |
@@ -855,6 +904,8 @@
 | 画像完成率低 | 中 | 简化表单、默认示例（与 PRD 一致） |
 
 ---
+
+<a id="sec-14"></a>
 
 ## 14. 里程碑与交付物（develop1 §12）
 
@@ -870,17 +921,23 @@
 
 ---
 
+<a id="sec-15"></a>
+
 ## 15. H5 验证端增强（阶段 A，与 MVP 并行策略）
 
 在不影响验证门统计口径前提下，可排 **阶段 A**：下拉刷新、触底分页、详情多图/类似推荐、空状态品牌图、商品池 **~200**。通过后再全力投入 **§9** 小程序与后端人天。
 
 ---
 
+<a id="sec-16"></a>
+
 ## 16. 历史附录索引（原 develop1 §13）
 
 - A 打标 Excel 模板 · B `auto_tag.py` · C `csv_to_mysql.py` · D `analyze_experiment.py` · E 缓存详设 · F 索引优化 —— 独立资产请放入 `prototype/docs/` 或运维仓库；原文可查 **Git 历史**中的 `develop1.md`。
 
 ---
+
+<a id="sec-appendix-a"></a>
 
 ## 附录 A：PRD 分项与 H5 阶段排期（原 develop.md）
 
@@ -894,12 +951,12 @@
 
 | PRD | 要求摘要 | H5 `prototype/client` | 小程序 `prototype/mp-weixin` |
 |-----|----------|----------------------|------------------------------|
-| **F1** | 关系/年龄必填；兴趣≤3、禁忌可选；**多画像切换** | 单一路径画像；禁忌已支持；无多画像 | `profile` 简版；无多画像 |
-| **F2** | 双列流；顶筛场合/预算/风格；**下拉刷新、上拉更多**；防抖 500ms；空状态+清空 | 双列✅；粘性筛选✅；防抖✅；**下拉刷新✅**；**触底加载更多✅**（`offset/limit`）；空状态 **SVG 插画✅** + 清空✅ | 双列+请求；筛选以页面为准；**无刷新/分页** |
-| **F3** | 图轮播 **≥3**；理由 2–3 条；规格折叠；**横向类似推荐**；底栏收藏+去购买 | **多图轮播✅**（`images`≥3）；理由来自算法✅；**类似推荐横滑✅**（`/api/related`）；**无规格折叠**；底栏在抽屉内✅ | 详情占位为主 |
+| **F1** | 关系/年龄必填；兴趣≤3、禁忌可选；**多画像切换** | 单一路径画像；禁忌已支持；无多画像 | **`tags`** 与 H5 **字段/枚举一致**；**无多画像切换** |
+| **F2** | 双列流；顶筛场合/预算/风格；**下拉刷新、上拉更多**；防抖 500ms；空状态+清空 | 双列✅；粘性筛选✅；防抖✅；**下拉刷新✅**；**触底加载更多✅**（`offset/limit`）；空状态 **SVG 插画✅** + 清空✅ | 双列✅；顶筛✅；**防抖 500ms**✅；**下拉刷新**/**触底分页**✅；空状态 **文案+清空**（**无 H5 级 SVG 插画**） |
+| **F3** | 图轮播 **≥3**；理由 2–3 条；规格折叠；**横向类似推荐**；底栏收藏+去购买 | **多图轮播✅**（`images`≥3）；理由来自算法✅；**类似推荐横滑✅**（`/api/related`）；**无规格折叠**；底栏在抽屉内✅ | **`GET /api/product/:id?profile=`** + 多图 swiper + 理由；**横滑相关推荐**✅；**无规格折叠**；收藏为 **`collect`**（**未接** **`/api/favorite*`**） |
 | **F4** | 收藏列表、送礼记录、左滑删除等 | 收藏仅 Toast + 埋点，**无列表/记录** | 未接 |
 | **F5** | 订阅提醒、模板消息 | 无 | 无 |
-| **F6** | 微信登录、个人中心、游客收藏 | 匿名 `zhili_vid`；H5 **无中心**；**B1 已具备服务端登录** | 未接登录 |
+| **F6** | 微信登录、个人中心、游客收藏 | 匿名 `zhili_vid`；H5 **无中心**；**B1 已具备服务端登录** | 匿名 **`zhili_vid`** / **`zhili_group`** 已写 Storage；**未接** **`wx.login`→`/api/user/login`** |
 
 ### 1.2 数据与算法（PRD §4）
 
@@ -930,7 +987,7 @@
 
 | 版本 | PRD 核心 | 与当前差距摘要 |
 |------|-----------|----------------|
-| **v1.0** | 画像、推荐流、详情、收藏、跳转购买；指标：10 次真实购买 | 缺：小程序正式 UI、**小程序侧登录**、**真实购买跳转与归因**、收藏持久化、F3 完整度 |
+| **v1.0** | 画像、推荐流、详情、收藏、跳转购买；指标：10 次真实购买 | 缺：**小程序侧 `wx.login` + Bearer**、**`/api/favorite*` 收藏持久化**、**真实购买跳转与归因**、F3 **规格折叠**、与 H5 **空状态 SVG** 等 polish；**已具备**：四页流 + **B5 详情 API** + 匿名 **`collect`** |
 | **v1.1** | 订阅、送礼记录、数据看板；订阅用户≥500 | 全部待建 |
 | **v1.2** | 商品池 500、负反馈、AB 框架；CTR≥15% | 商品可脚本扩容；负反馈与正式 AB 后台待建 |
 
@@ -945,7 +1002,7 @@ flowchart TB
     API[Node API + scoring]
     DS[products.json 200条]
     TE[埋点 jsonl/csv]
-    MP[小程序骨架]
+    MP[小程序方案B四页]
   end
   subgraph near [短期补齐 PRD v1.0 差距]
     F2p[F2 刷新/分页]
@@ -971,7 +1028,7 @@ flowchart TB
 
 ### 阶段 A：H5 与数据「贴齐 PRD 表述」（约 3–5 人日）
 
-**状态**：已在 `prototype/client` + `prototype/server` **落地**（v2.4 同步）；小程序仍按 B 阶段排期。
+**状态**：已在 `prototype/client` + `prototype/server` **落地**（v2.4 同步）；小程序 **附录 A 阶段 A 之 A1～A3**（列表刷新/分页、详情多图、横向相关）已在 **方案 B 四页流** 中 **落地**；**A4（空状态 SVG）**、**A5（商品池条数）** 以 H5/服务端为准；**附录 A §三「阶段 B（PRD）」** 与 **§9.1 后端里程碑** 对照见 [prototype/mp-weixin/ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)。
 
 | 序号  | 任务                                     | PRD 锚点 | 验收                                       |
 | --- | -------------------------------------- | ------ | ---------------------------------------- |
@@ -983,7 +1040,7 @@ flowchart TB
 
 ### 阶段 B：小程序 v1.0 核心（约 8–15 人日）
 
-> **与「能跑通当前骨架」相关的工程步骤**（**阶段一 1–12**：启 **`prototype/server`**、配 **`app.js` → `apiBase`**、**`project.config.json` → `appid`**、导入、**不校验合法域名**、**Network/Storage**、真机要点）见 **[prototype/mp-weixin/README.md](prototype/mp-weixin/README.md)「小程序开发步骤（明确版）」**。下表为 **阶段 B 产品任务与验收**（B1～B6），与上文 **配合使用**。
+> **与「能跑通当前骨架」相关的工程步骤**（**阶段一 1–12**：启 **`prototype/server`**、配 **`app.js` → `apiBase`**、**`project.config.json` → `appid`**、导入、**不校验合法域名**、**Network/Storage**、真机要点）见 **[prototype/mp-weixin/README.md](prototype/mp-weixin/README.md)「小程序开发步骤（明确版）」**。下表为 **阶段 B 产品任务与验收**（**本表 B1～B6 = PRD/附录 A 分项**，与 **§9.1 后端里程碑 B1～B6** 同名**不同义**；后者与小程序接线对照见 **[ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)**）。
 
 | 序号 | 任务 | PRD 锚点 | 验收 |
 |------|------|-----------|------|
@@ -1039,7 +1096,7 @@ flowchart TB
 | 对照与计划 | **develop2.md**（本文 + **附录 A**） |
 | 接口与埋点 | [prototype-spec.md](prototype-spec.md)、[api.md](api.md) |
 | Vue 入口 | [prototype-client-App-vue.md](prototype-client-App-vue.md) |
-| 小程序 | [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md)（**「小程序开发步骤（明确版）」**：阶段一 1–12、排错、阶段二/三；**§三 阶段 B** 为 PRD 验收表） |
+| 小程序 | [prototype/mp-weixin/README.md](prototype/mp-weixin/README.md)（**「小程序开发步骤（明确版）」**：阶段一 1–12、排错、阶段二/三）；**§9.1 后端 ↔ 小程序**：[ACCEPTANCE.md](prototype/mp-weixin/ACCEPTANCE.md)；**§三 阶段 B** 为 **PRD** 验收表（B1～B6 非 §9.1） |
 | PRD / 验证 | [prd_v0.md](prd_v0.md)、[plan0.md](plan0.md) |
 
 ---
@@ -1049,6 +1106,8 @@ flowchart TB
 早期「PRD 与 plan0 对齐评估」计划中的 P0–P3 叙述已由 **`prototype` 落地** 部分替代；**以附录 A §一、§三为 PRD 分项与阶段排期**；若需追溯旧文件名，可查 Git 历史。
 
 ---
+
+<a id="sec-17"></a>
 
 ## 17. 文档索引
 
