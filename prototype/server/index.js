@@ -4,24 +4,24 @@ import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { computeScore, buildReasonLines } from './scoring.js';
 import { initDatabase, initRedis, getPool, getRedis, query } from './db.js';
 import userRouter from './routes/user.js';
+import profileRouter from './routes/profile.js';
+import { productsData } from './productsData.js';
+import {
+  parsePaging,
+  shelfFromQuery,
+  runHotList,
+  runPersonalizedList,
+  parsePagingFromBody,
+  enrich,
+} from './lib/recommendCore.js';
 import { wechatAuthConfigured } from './lib/wechat.js';
 import { jwtConfigured } from './lib/jwt.js';
 import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: path.join(__dirname, '.env') });
-
-const productsPath = path.join(__dirname, 'products.json');
-let productsData;
-try {
-  productsData = JSON.parse(fs.readFileSync(productsPath, 'utf8'));
-} catch (e) {
-  console.error('无法读取 products.json:', productsPath, e.message);
-  process.exit(1);
-}
 
 const portFile = path.join(__dirname, '.listen-port');
 function writeListenPort(p) {
@@ -55,100 +55,27 @@ const dataDir = path.join(__dirname, 'data');
 const logFile = path.join(dataDir, 'events.jsonl');
 const csvFile = path.join(dataDir, 'events.csv');
 
-const BUDGET_RANGE = {
-  lt100: [0, 100],
-  '100-300': [100, 300],
-  '300-500': [300, 500],
-  '500-1000': [500, 1000],
-  '1000+': [1000, 1e9]
-};
-
 app.use(cors());
 app.use(express.json({ limit: '256kb' }));
 
 app.use('/api/user', userRouter);
+app.use('/api/profile', profileRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-
-function priceInBudget(price, budgetKey) {
-  if (!budgetKey) return true;
-  const [lo, hi] = BUDGET_RANGE[budgetKey] || [0, 1e9];
-  const p = Number(price) || 0;
-  return p >= lo && p <= hi;
-}
-
-function filterShelf(list, q) {
-  const occasion = q.occasion || '';
-  const budget = q.budget || '';
-  const style = q.style || '';
-  return list.filter((p) => {
-    if (occasion) {
-      const oc = p.occasions || [];
-      if (!oc.includes(occasion) && !oc.includes('universal')) return false;
-    }
-    if (budget && !priceInBudget(p.price, budget)) return false;
-    if (style) {
-      const st = p.styles || [];
-      if (!st.includes(style)) return false;
-    }
-    return true;
-  });
-}
-
-function sortHot(a, b) {
-  return (a.hotRank ?? 999) - (b.hotRank ?? 999) || String(a.id).localeCompare(String(b.id));
-}
-
-function parsePaging(q) {
-  const limit = Math.min(50, Math.max(1, parseInt(String(q.limit || '20'), 10) || 20));
-  const offset = Math.max(0, parseInt(String(q.offset || '0'), 10) || 0);
-  return { limit, offset };
-}
 
 app.get('/api/hot', (req, res) => {
   const q = req.query || {};
   const { limit, offset } = parsePaging(q);
-  const shelf = { occasion: q.occasion, budget: q.budget, style: q.style };
-  let pool = filterShelf(productsData, shelf);
-  if (!pool.length) pool = productsData;
-  const sorted = [...pool].sort(sortHot);
-  const list = sorted.slice(offset, offset + limit).map((p) => enrich(p));
-  res.json(list);
+  const shelf = shelfFromQuery(q);
+  res.json(runHotList(productsData, shelf, offset, limit));
 });
 
 app.post('/api/personalized', (req, res) => {
   const body = req.body || {};
-  const { shelf, limit: limIn, offset: offIn, ...profile } = body;
-  const limit = Math.min(50, Math.max(1, parseInt(String(limIn ?? 20), 10) || 20));
-  const offset = Math.max(0, parseInt(String(offIn ?? 0), 10) || 0);
+  const { shelf, ...profile } = body;
+  const { limit, offset } = parsePagingFromBody(body);
   const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
-  let pool = filterShelf(productsData, shelfQ);
-  if (!pool.length) pool = productsData;
-
-  let rows = pool
-    .map((p) => ({
-      item: { ...enrich(p, profile), score: computeScore(p, profile) },
-      hotRank: p.hotRank ?? 999,
-      id: p.id
-    }))
-    .sort((a, b) => b.item.score - a.item.score || a.hotRank - b.hotRank);
-
-  if (offset === 0 && rows.length < limit) {
-    const used = new Set(rows.map((x) => x.id));
-    const filler = [...productsData]
-      .sort(sortHot)
-      .filter((p) => !used.has(p.id))
-      .slice(0, Math.max(0, limit - rows.length))
-      .map((p) => ({
-        item: { ...enrich(p, profile), score: computeScore(p, profile) },
-        hotRank: p.hotRank ?? 999,
-        id: p.id
-      }));
-    rows = rows.concat(filler);
-  }
-
-  const page = rows.slice(offset, offset + limit).map((x) => x.item);
-  res.json(page);
+  res.json(runPersonalizedList(productsData, profile, shelfQ, offset, limit));
 });
 
 app.get('/api/related/:id', (req, res) => {
@@ -279,30 +206,6 @@ app.get('/api/health', async (req, res) => {
 
   res.json(status);
 });
-
-function productImages(p) {
-  const base = p.image || `https://picsum.photos/seed/${encodeURIComponent(p.id)}/400/400`;
-  if (Array.isArray(p.images) && p.images.length) return p.images.slice(0, 6).map(String);
-  return [
-    base,
-    `https://picsum.photos/seed/${encodeURIComponent(p.id)}a/400/400`,
-    `https://picsum.photos/seed/${encodeURIComponent(p.id)}b/400/400`
-  ];
-}
-
-function enrich(p, profile) {
-  const reasons = profile ? buildReasonLines(p, profile) : [{ icon: '🎁', text: p.sellPoint || '热门精选' }];
-  const images = productImages(p);
-  return {
-    id: p.id,
-    title: p.title,
-    price: p.price,
-    image: images[0],
-    images,
-    sellPoint: p.sellPoint,
-    reasons
-  };
-}
 
 async function tryListen(port) {
   const endExclusive = BASE_PORT + PORT_RANGE;

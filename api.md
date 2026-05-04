@@ -13,7 +13,7 @@
 | **前缀** | 除导出 CSV 外，业务接口均在 **`/api`** 下 |
 | **JSON** | `Content-Type: application/json`；请求体上限约 **256KB** |
 | **CORS** | 开发态已开启，跨域按部署环境自行收紧 |
-| **鉴权** | 仅 **`GET /api/user/me`** 要求 **`Authorization: Bearer <JWT>`**；其余当前路由不要求登录 |
+| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；`hot`/`personalized`/`collect` 等仍可不登录 |
 
 ### 1.1 重要：埋点与收藏路径（develop2 §7.1）
 
@@ -31,13 +31,21 @@
 | `GET` | `/api/health` | 健康检查（商品数、DB/Redis、`auth_configured`、`jwt_strong_secret`） |
 | `POST` | `/api/user/login` | B1：微信 `code` 换会话；需 MySQL |
 | `GET` | `/api/user/me` | B1：当前登录用户；Bearer JWT |
+| `GET` | `/api/user/recommend` | **B3**：用 **默认画像** + 顶筛 + 分页返回商品卡；Query **`zhili_group`/`group`**（`A`→热门、`B`/缺省→个性化）；无默认画像 **404**；Bearer |
 | `GET` | `/api/hot` | 对照组热门列表 + 顶筛 + 分页 |
 | `POST` | `/api/personalized` | 实验组个性化列表 + 顶筛 + 分页 |
 | `GET` | `/api/related/:id` | 类似推荐（最多 8 条） |
 | `POST` | `/api/collect` | 埋点上报 |
 | `GET` | `/api/export/events.csv` | 导出埋点 CSV |
+| `GET` | `/api/profile` | **B2** 画像列表；Query **`offset`/`limit`**（默认 20、最大 50）；Bearer |
+| `POST` | `/api/profile` | **B2** 创建画像；Body 与 **`personalized` 画像段** 一致（见 **§4.3**）；Bearer |
+| `GET` | `/api/profile/default` | **B2** 当前用户默认画像；无默认时 **404** `NO_DEFAULT_PROFILE`；Bearer |
+| `GET` | `/api/profile/:id` | **B2** 详情；Bearer |
+| `PUT` | `/api/profile/:id` | **B2** 全量更新；Bearer |
+| `PUT` | `/api/profile/:id/default` | **B2** 设为默认（幂等）；Bearer |
+| `DELETE` | `/api/profile/:id` | **B2** 删除；仅剩一条时 **409**；Bearer |
 
-**规划中（B2）**：服务端 **`/api/profile*`** 尚未实现；契约与路由草案见 **§8** 与 [develop2.md](develop2.md) **§9.3**。当前 H5 仍以 **`localStorage.zhili_profile`** 直传 `personalized`。
+> H5 仍可用 **`localStorage.zhili_profile`** 直传 **`/api/personalized`**；与 **`/api/profile`** 服务端持久化可并行存在。
 
 ---
 
@@ -124,6 +132,65 @@
 | 401 | `UNAUTHORIZED` | 缺头、格式错、JWT 无效/过期、`sub` 非法 |
 | 404 | `NOT_FOUND` | JWT 合法但用户行不存在 |
 | 503 | `DB_UNAVAILABLE` | 数据库未连接 |
+
+### 4.2.1 `GET /api/user/recommend`（B3 · 与默认画像衔接）
+
+**说明**：登录用户 **一条请求** 拉推荐列表：服务端读取 **`user_profile` 默认行**，再调用与 **`GET /api/hot`** / **`POST /api/personalized`** **同一套** `lib/recommendCore.js` 逻辑（develop2 **§9.4**）。**不是** 对外的 **`GET /api/recommend`**（B4 网关）。
+
+**鉴权**：`Authorization: Bearer <token>`。
+
+**Query**（与 **`GET /api/hot`** 顶筛、分页语义一致）：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `occasion` | （空） | 场合 |
+| `budget` | （空） | 预算档位 |
+| `style` | （空） | 风格 |
+| `offset` | `0` | 分页 |
+| `limit` | `20` | 1～50 |
+| `zhili_group` 或 `group` | `B` | **`A`**：对照组 → 返回 **`mode: "hot"`** 列表；**`B`** 或其它：实验组 → **`mode: "personalized"`**，画像来自 DB 默认条 |
+
+**成功 200**：
+
+```json
+{
+  "mode": "personalized",
+  "list": [ /* ProductCard[]，与 §7 一致 */ ]
+}
+```
+
+| HTTP | `error` | 说明 |
+|------|---------|------|
+| 404 | `NO_DEFAULT_PROFILE` | 尚未创建或未设默认画像（与 **`GET /api/profile/default`** 一致） |
+| 401 | `UNAUTHORIZED` | 同 §4.2 |
+| 503 | `DB_UNAVAILABLE` | 无数据库 |
+
+实现：**`routes/user.js`**；内核：**`lib/recommendCore.js`**；商品池：**`productsData.js`**。
+
+### 4.3 B2 画像 CRUD（`/api/profile*`）
+
+**鉴权**：全部 **`Authorization: Bearer <token>`**；**`user_id` 仅来自 JWT**，Body 勿传 `user_id`。
+
+**创建 / 更新 Body**（与 §5.3 画像字段一致，JSON camelCase）：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `relation` | 是 | `partner` / `family` / `friend` / `colleague` / `elder` / `teacher` / `client` / `other` |
+| `ageBand` | 是 | 与 `personalized` 一致 |
+| `occasion` | 是 | |
+| `budget` | 是 | 档位枚举 |
+| `interests` | 否 | 数组，**≤3** |
+| `gender` | 否 | 缺省按 **`unknown`** 存 |
+| `style` | 否 | 可空 |
+| `taboos` | 否 | 数组 |
+| `name` | 否 | 展示名，≤64 字 |
+| `is_default` | 否 | 首条画像会 **强制为默认**；设为 `true` 时会清除同用户其他默认 |
+
+**`GET /api/profile`**：响应 **`{ list, total }`**，`list` 项为画像对象（含 **`id`**、**`ageBand`** 等 camelCase）。
+
+**错误码摘要**：`400` `BAD_REQUEST` / `INVALID_ENUM`；`404` `NOT_FOUND` / `NO_DEFAULT_PROFILE`；`409` `CONFLICT`（删最后一条）；`503` `DB_UNAVAILABLE`。
+
+校验枚举实现见 **`lib/profileSchema.js`**。
 
 ---
 
@@ -229,25 +296,9 @@
 
 ## 8. 规划中接口（未在验证端实现）
 
-与 develop2 **§7.2、§9.1、§9.3** 对齐，供网关 / MVP 排期引用。
+与 develop2 **§7.2、§9.1** 对齐。**B2 `/api/profile*`** 见 **§2**、**§4.3**。**B3** 已部分落地 **`GET /api/user/recommend`**（§4.2.1）；**`GET /api/recommend`** 仍为 **B4**。
 
-### 8.1 B2 画像 CRUD（契约草案，**未编码**）
-
-**鉴权**：以下路径均需 **`Authorization: Bearer`**（与 `GET /api/user/me` 相同）。**`user_id` 仅来自 JWT**，不得信任 Body 中的用户 id。
-
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| `POST` | `/api/profile` | 创建画像；Body 与 **`POST /api/personalized` 画像段** 同形（`relation`、`ageBand`、`interests`≤3、`occasion`、`budget`、`gender`、`style`、`taboos`）+ 可选 `name`、`is_default` |
-| `GET` | `/api/profile` | 当前用户画像列表；分页 **`offset`/`limit`** 或与 develop2 约定之 `page`/`size` |
-| `GET` | `/api/profile/default` | 默认画像一条，供 **B3** 网关组装 `personalized` |
-| `GET` | `/api/profile/:id` | 详情；**404/403** 若不属于当前用户 |
-| `PUT` | `/api/profile/:id` | 全量或部分更新（以最终实现文档为准） |
-| `DELETE` | `/api/profile/:id` | **可选**；删除规则见 develop2 §9.3 |
-| `PUT` | `/api/profile/:id/default` | 设为默认画像（幂等）；副作用：同用户其余 `is_default` 清零 |
-
-**库表与字段映射**：**策略 A 已选**——`user_profile` 列 **`age_band`、`interests`（JSON）、`occasion`、`style`、`taboos`** 与 **`personalized` / `scoring.js`** 一致；见 **`migrations/001_b0_schema.sql`**（新装）与 **`migrations/002_user_profile_scoring_align.sql`**（旧库升级，由 **`migrate.js`** 检测 `age_range` 后执行）。说明见 **develop2 §9.3.1**。
-
-### 8.2 其余 MVP 端点
+### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
@@ -264,18 +315,21 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | 除用户路由外的 Express 挂载 |
-| `prototype/server/routes/user.js` | 登录、限流、`/me` |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related` |
+| `prototype/server/productsData.js` | 加载 **`products.json`**（B3 与用户推荐复用） |
+| `prototype/server/lib/recommendCore.js` | **B3**：hot/personalized 共用内核、`pickHotOrPersonalized` 等 |
+| `prototype/server/routes/user.js` | 登录、限流、`/me`、**`/recommend`（B3）** |
+| `prototype/server/routes/profile.js` | **B2** 画像 CRUD |
+| `prototype/server/lib/profileSchema.js` | B2 校验与行列映射 |
 | `prototype/server/middleware/requireAuth.js` | Bearer JWT |
 | `prototype/server/lib/jwt.js` / `lib/wechat.js` | JWT 与微信 / mock |
 | `prototype/server/scoring.js` | 打分与理由 |
 | `prototype/server/migrations/001_b0_schema.sql` | 含 **`user_profile`**（列与 scoring 对齐） |
 | `prototype/server/migrations/002_user_profile_scoring_align.sql` | 旧库 **`age_range`→`age_band`** 等（策略 A） |
-| （规划）`prototype/server/routes/profile.js` | B2 画像 CRUD，见 develop2 §9.3 |
 
 ---
 
-## 10. Postman 验证（B1 与其余 API）
+## 10. Postman 验证（B1、B2 与其余 API）
 
 ### 10.1 前置条件
 
@@ -292,6 +346,7 @@
 |------|------|------|
 | `base_url` | `http://127.0.0.1:3000` | 与 `.listen-port` 一致 |
 | `token` | （空） | 由「Login」请求的 **Tests** 自动写入，见下 |
+| `profile_id` | （空） | **B2**：由 `POST /api/profile` **201** 的 Tests 写入（与导入的 Collection 一致；手写请求时从响应 `profile.id` 复制） |
 
 每个请求的 URL 使用 **`{{base_url}}/api/...`**，并在右上角选中该 Environment。
 
@@ -302,6 +357,12 @@
 | 1 | `GET` | `{{base_url}}/api/health` | 无 |
 | 2 | `POST` | `{{base_url}}/api/user/login` | Body **raw JSON**，见下表；**Tests** 脚本保存 `token` |
 | 3 | `GET` | `{{base_url}}/api/user/me` | **Authorization → Type: Bearer Token**，Token 填 **`{{token}}`**（勿手写 `Bearer` 前缀，Postman 会自动加） |
+| 3r | `GET` | `{{base_url}}/api/user/recommend?occasion=birthday&budget=100-300&style=practical&offset=0&limit=10&zhili_group=B` | **Bearer**；**B3**；需已有默认画像 |
+| 3a | `GET` | `{{base_url}}/api/profile?offset=0&limit=20` | **Bearer** `{{token}}`；**B2** 列表 |
+| 3b | `POST` | `{{base_url}}/api/profile` | **Bearer**；Body 与 **§4.3** 画像字段一致；**201** 时 Tests 可写 **`profile_id`** |
+| 3c | `GET` | `{{base_url}}/api/profile/default` | **Bearer**；无默认时 **404** |
+| 3d | `GET` | `{{base_url}}/api/profile/{{profile_id}}` | **Bearer**；需有效 **`profile_id`** |
+| 3e | `PUT` | `{{base_url}}/api/profile/{{profile_id}}/default` | **Bearer**；设为默认 |
 | 4 | `GET` | `{{base_url}}/api/hot?occasion=birthday&budget=100-300&style=practical&offset=0&limit=5` | 无 |
 | 5 | `POST` | `{{base_url}}/api/personalized` | Body **raw JSON**，见 §10.4 |
 | 6 | `GET` | `{{base_url}}/api/related/p001` | 无；或加 Query **`profile`**（JSON 字符串，见 §10.5） |
@@ -372,8 +433,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me` 的 Bearer 已绑定 **`{{token}}`**。若你在 Environment 里也定义了同名 **`token`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3** 请求需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v2.9** 快照一致（B0+B1 已具备；**B2** 库表策略 A 已落地，**`/api/profile*`** 契约见 §8.1 未编码；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** 与 **`lib/recommendCore.js`** 已具备；**B4 `GET /api/recommend`** 仍为规划；`develop.md` / `develop1.md` 已废止）。

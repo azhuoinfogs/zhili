@@ -1,8 +1,8 @@
 # 知礼 · 整合开发计划（develop2）
 
-**版本**：v2.9  
-**更新**：2026-05-04（**策略 A** 落地：`user_profile` 列与 `personalized`/scoring 对齐；`002` 迁移 + `migrate.js` 条件执行）  
-**状态**：待评审（仓库 **B0 + B1 + 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
+**版本**：v3.0  
+**更新**：2026-05-04（**B2** `/api/profile*`；**B3** **`GET /api/user/recommend`** + **`lib/recommendCore.js`** + **`productsData.js`**；**§9.3.4** 与 [api.md](api.md) **§4.3、§4.2.1、§10** 同步；**§9.4** WBS 与落地快照）  
+**状态**：待评审（仓库 **B0 + B1 + B2 + B3（主路径）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
 
@@ -15,18 +15,18 @@
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备；B2 未编码** | 验证流：`GET /api/hot`、`POST /api/personalized`（**`offset`/`limit`** 分页，默认 20、最大 50）、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；列表项含 **`images` 数组**。**MVP B1**：`POST /api/user/login`、`GET /api/user/me`（`Authorization: Bearer`）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`。**B2** 画像 REST 见 **§9.3** 与 [api.md](api.md) §8（**尚未挂载**） |
+| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**（默认画像 + **`recommendCore`** 与 hot/personalized 同源，**Bearer**）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1、§4.3、§10**；B2 自测见本文 **§9.3.4** |
 | **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条** |
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
 | **阶段 A（H5）** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐（排期见附录 A §三） |
-| **MVP 后端（B0～）** | **B0+B1 已具备；B2 仅库表对齐** | **B0** 同前。**B1** 同前。**B2**：**`user_profile`** 已与 **`personalized`/scoring** 列对齐（**策略 A**：`001` 新表定义 + **`002`+`migrate.js`** 升级旧库）；**`/api/profile*` REST 仍未开工**。**B3+**：推荐网关、`/api/favorite*`、联盟转链等仍待开发 |
+| **MVP 后端（B0～）** | **B0+B1+B2+B3（部分）已具备** | **B0** 同前。**B1** 同前。**B2** 同前。**B3**：**`lib/recommendCore.js`**、**`productsData.js`**；**`GET /api/user/recommend`**（`routes/user.js`）衔接默认画像与 **`zhili_group`** 分流；**`index.js`** 中 **`/api/hot`、`/api/personalized`** 已改为调用 **`recommendCore`**。**B3 余量**（可选）：`related` 与画像的进一步抽取、集成测；见 **§9.4.0**。**B4+**：对外的 **`GET /api/recommend`**、Redis、`/api/favorite*`、联盟转链等仍待开发 |
 | **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
 **本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`；**若用 Docker MySQL/Redis**，先在该 README 完成 compose 与 `npm run dev:db`，保证 `server/.env` 中 **`DB_PASSWORD` 与 `MYSQL_ROOT_PASSWORD` 一致**；改密后旧卷需 `docker:mysql-fresh` 或手动 `ALTER USER`）。
 
-**下一增量（与 §9.1 顺序一致）**：**B2** 画像 CRUD →（**B9** 商品写接口可部分并行）→ **B3** 推荐内核对接 → **B4** 推荐网关 + Redis 缓存 → **B5**～**B8** → **B10** 联调硬化。（**B1** 已完成。）
+**下一增量（与 §9.1 顺序一致）**：（**B9** 商品写接口可部分并行）→ **B3 收尾**（§9.4.0 余量）→ **B4** 推荐网关 + Redis（**`GET /api/recommend`**）→ **B5**～**B8** → **B10** 联调硬化。（**B1、B2** 已完成；**B3 主链已落地**。）
 
 ---
 
@@ -35,7 +35,7 @@
 | 文档 | 用途 |
 |------|------|
 | **develop2.md（本文）** | 整合：验证门 + MVP 全量结构（范围/技术/库表/API/任务/验收/灰度/风险）+ `prototype` 勘误与映射；**附录 A** 为 PRD 分项与阶段 A–E |
-| [api.md](api.md) | `prototype/server` HTTP 接口说明与 Postman 验证 |
+| [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **`GET /api/user/recommend`** **§4.2.1**；Postman **§10**（含 `token`、`profile_id`） |
 | [prototype-spec.md](prototype-spec.md) | 当前验证端工程与埋点事实 |
 
 > 原 `develop.md`、`develop1.md` 已废止；SQL 与迁移以 **`prototype/server/migrations/*.sql`** 与本文 **§6** 为准，需追溯全文可查 Git 历史。
@@ -142,7 +142,7 @@
 | develop1 表 | prototype 现状 | MVP 落库说明 |
 |---------------|------------------|--------------|
 | `user` | 匿名 `zhili_vid`（字符串） | 微信登录后写入 `openid`；可保留 `device_id`/`anon_id`  varchar 关联历史埋点 |
-| `user_profile` | 浏览器单次画像 JSON；服务端表见 **`migrations/001`+`002`** | 列 **`age_band`、`interests` JSON、`occasion`、`style`、`taboos`** 与 **`POST /api/personalized` / `scoring.js`** 一致（**策略 A**，§9.3.1）；B2 REST 仍待开发 |
+| `user_profile` | 浏览器单次画像 JSON；服务端表见 **`migrations/001`+`002`** | 列 **`age_band`、`interests` JSON、`occasion`、`style`、`taboos`** 与 **`POST /api/personalized` / `scoring.js`** 一致（**策略 A**，§9.3.1）；**B2** **`/api/profile*`** 已实现 |
 | `product` | `products.json` 行 | `id`→`product_id`；`title`→`name`；**`styles` 数组**→develop1 单 `style` enum：取主风格或拆成 `styles` json 改表 |
 | `collection` | 无持久化 | 新表 + `POST/DELETE /api/favorite*`（见 §7） |
 | `event` | `events.jsonl` 多字段 JSON | `event_type` ← `event`；`extra` ← 其余字段 JSON；`user_id` 登录后 FK，未登录可写 0 + `extra.zhili_vid` |
@@ -195,6 +195,8 @@
 
 网关层只负责：**鉴权** → **取当前 `profile_id` 与 shelf** → 调内部 **`/api/hot` 或 `/api/personalized`**（已实现分页、筛选、`images`、`/api/related`）→ 映射响应字段名（若小程序协议固定）。
 
+**B3（推荐内核对接）** 把上述「取画像 + 调内核」在工程上 **落地为可复用模块/包/内部 HTTP**（不重写 `scoring.js`），目的、边界与子任务见 **§9.4**。
+
 ---
 
 ## 8. 推荐算法、理由与缓存（develop1 §6）
@@ -221,8 +223,8 @@
 | --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | B0  | **工程与数据基座**      | Nest（或沿用 **Express 单体**，**当前仓库为后者**）；MySQL 连接池；迁移脚本；**§6 建表**（`user` / `user_profile` 含 `taboos` / `product` / `collection` / `event`）；**`products.json` → `product` 初始化**（字段对照 §6.3）；本地/测试 Redis（**`prototype/docker-compose.yml` + `npm run dev:db`**） | —            | 可执行迁移、种子数据、健康检查；**交付物路径**：`server/migrations/`、`server/migrate.js`、`server/seed.js`、`server/db.js`、`prototype/README.md`（Docker）、`prototype/scripts/docker-dev-up.mjs` |
 | B1  | **微信登录**         | `POST /api/user/login`：`code`2Session → `openid` 落 `user`；JWT 或 session；与小程序 `app.login` 约定                                                                                                                                                              | B0           | **已实现（Express）**：`POST /api/user/login`、`GET /api/user/me`、`lib/jwt.js`、`middleware/requireAuth.js`；详见 [prototype/README.md](prototype/README.md)「B1」                  |
-| B2  | **画像 CRUD**      | 持久化 **`user_profile`**；REST **与 `POST /api/personalized` 画像段英文键一致**（§7.2、§9.3）；鉴权 **`requireAuth`**；默认画像与列表分页；详见 **§9.3**                                                                                                                                | B1           | 迁移（补列若有）+ `routes/profile*.js` + 契约 + 单测                                                                                                                               |
-| B3  | **推荐内核对接**       | **不重写公式**：移植或子进程/同仓引用 **`computeScore` / `buildReasonLines`**（§8）；内部仍调 **`GET /api/hot`** / **`POST /api/personalized`**（offset/limit）；或把现 Express 路由打成子应用挂载                                                                                             | B0、B2（需默认画像） | 与验证端一致的分页与列表字段                                                                                                                                                         |
+| B2  | **画像 CRUD**      | 持久化 **`user_profile`**；REST **与 `POST /api/personalized` 画像段英文键一致**（§7.2、§9.3）；鉴权 **`requireAuth`**；默认画像与列表分页；详见 **§9.3**                                                                                                                                | B1           | **`routes/profile.js`**、**`lib/profileSchema.js`**、**`profile.test.mjs`**；**`002`+`migrate.js`**；契约见 [api.md](api.md)                                                                                                                               |
+| B3  | **推荐内核对接**       | **目的**：登录后推荐以 **B2 默认画像** 为输入，与 **`POST /api/personalized`**、**`scoring.js`** 同源、不漂移。**边界**：**不**实现对外 **`GET /api/recommend`**、**不上 Redis**（**B4**）。详见 **§9.4**                                                                                             | B0、B1、B2 | **主路径已实现**：**`lib/recommendCore.js`**、**`productsData.js`**、**`GET /api/user/recommend`**（[api.md](api.md) §4.2.1）；**`index.js`** 已切至 **`recommendCore`**。**余量**见 **§9.4.0**                                                                                                                                                         |
 | B4  | **推荐网关 + Redis** | `GET /api/recommend`：`page`/`size` → **offset/limit**（§7.2）；**§8.3** 缓存 key、TTL、画像变更失效、故障降级热门                                                                                                                                                            | B3、B0（Redis） | P90 目标可测                                                                                                                                                               |
 | B5  | **商品读模型**        | `GET /api/product/:id`；可选代理 **`/api/related/:id`**；与小程序详情协议对齐                                                                                                                                                                                            | B0           | 详情 JSON 含 `images`、理由字段                                                                                                                                                |
 | B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                               | B1           | 收藏幂等与列表分页                                                                                                                                                              |
@@ -250,12 +252,13 @@
 
 > **人天参照**：develop2 人天表「画像 CRUD API」约 **2 人日**；下表按 **0.25～0.5 人日** 粒度拆，便于并行（**契约与迁移** ∥ **路由实现**）与验收。
 
-#### 9.3.1 现状与缺口（实施前必读）
+#### 9.3.1 现状（实施约定）
 
 | 项 | 说明 |
 |----|------|
 | **表与列（策略 A 已选）** | **新装**：`001_b0_schema.sql` 中 **`user_profile`** 已含 **`age_band`、`interests` JSON、`occasion`、`style`**，与 **`personalized` / `scoring.js`** 语义一致。**旧库**：`npm run migrate` 在检测到仍存在 **`age_range`** 时自动执行 **`002_user_profile_scoring_align.sql`**（`age_range`→`age_band`、`circles`→`interests`，并 **`ADD occasion`、`style`**）。实现见 **`prototype/server/migrate.js`**。 |
-| **B2 路由** | **`/api/profile*`** 仍为 **§9.3.2～9.3.3** 待开发；落库读写可直接用 **与 API 相同的英文键名**（无需 `toRow` 重命名映射，仅需 JSON 序列化/校验）。 |
+| **B2 路由** | **`/api/profile*`** 已在 **`routes/profile.js`** 挂载；落库使用 **与 API 相同的英文键名**（`lib/profileSchema.js` 校验与序列化）。 |
+| **列表分页 SQL** | **`GET /api/profile`** 的 `offset`/`limit` 经 **`parsePaging`** 约束（`limit` 默认 20、最大 50；`offset`≥0）后，**`LIMIT`/`OFFSET` 以整数拼入 SQL**，**不使用** `LIMIT ? OFFSET ?` 预编译占位——否则部分 MySQL 会报 **`Incorrect arguments to mysqld_stmt_execute`**。详表与错误码见 [api.md](api.md) **§4.3**。 |
 | **鉴权** | 所有画像写读必须 **`Authorization: Bearer`** + **`requireAuth`**，`user_id` **仅来自 JWT `sub`**，**禁止**信任 Body 里的 `user_id` |
 
 #### 9.3.2 子任务与验收
@@ -263,17 +266,17 @@
 | 子项        | 任务                                          | 要点与验收                                                                                                                                                                                                                                                                                                         | 依赖        |
 | --------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
 | **B2.1**  | **契约冻结**                                    | 在 **`api.md`**（或 OpenAPI 片段）写明：**请求/响应 JSON 与 `POST /api/personalized` 画像段一致**——字段：`relation`、`ageBand`、`interests`（数组 ≤3）、`occasion`、`budget`、`gender`、`style`、`taboos`（数组）；可选 `name`（展示名，映射库 `user_profile.name`）。**枚举合法值**与 `prototype/client` 表单、`scoring.js` 常量一致（§6.2）。验收：评审签字或 PR 内联表格无 open question。 | B1        |
-| **B2.2**  | **迁移 / 映射落地**                               | **策略 A 已完成**：`migrations/002_user_profile_scoring_align.sql` + `migrate.js` 条件执行。**待办**：B2 路由层 **JSON 校验与 `interests`≤3** 单测。验收：旧库跑一次 `npm run migrate` 后 **`information_schema`** 无 `age_range`/`circles`，有 **`age_band`/`interests`/`occasion`/`style`**。                                                                                                                        | B2.1、B0   |
-| **B2.3**  | **`POST /api/profile` 创建**                  | Body 为完整画像 JSON + 可选 `name`、`is_default`。校验：必填 **relation、ageBand、occasion、budget**（与 PRD/H5 一致可调）；**interests.length ≤ 3**；非法 enum → **400** + `error` 码表。插入 **`user_id = req.userId`**。若 **`is_default: true`**：同事务内将该用户其他行 **`is_default=0`**（**唯一默认**）。验收：同一用户多条画像 + 仅一条 `is_default=1`。                  | B2.2、B1.5 |
-| **B2.4**  | **`GET /api/profile` 列表**                   | Query：`page`+`size` 或 **`offset`/`limit`**（与 §7.2 网关约定一致，**默认与上限**建议同商品接口 20/50）。仅返回 **`user_id = req.userId`**。响应为 **`{ list, total }`** 或纯数组（**团队选一种写死**）。验收：空列表 **200 + []**；越权访问他人 ID **不可达**（无 user_id 参数）。                                                                                              | B2.3      |
-| **B2.5**  | **`GET /api/profile/:id` 详情**               | `:id` 为画像主键；**404** 若不存在或 `user_id` 不匹配。返回体可直接用于小程序表单回显。验收：篡改 URL 访问他人 `profile_id` → **404** 或 **403**（二选一统一）。                                                                                                                                                                                               | B2.3      |
-| **B2.6**  | **`PUT /api/profile/:id` 更新**               | 语义：**全量替换**或 **PATCH 部分字段**（二选一写文档）；校验同创建。更新默认画像时同样 **清零其他 `is_default`**。验收：并发双默认请求后 DB 仍仅一条默认。                                                                                                                                                                                                              | B2.5      |
-| **B2.7**  | **`DELETE /api/profile/:id`（可选）**           | 若 PRD 要求「多画像管理」：删除非默认；**禁止删除最后一条**或删前强制改默认（**产品规则写死**）。若 MVP 砍删除：本项标 **Out of scope** 并在 `api.md` 标注。                                                                                                                                                                                                         | B2.5      |
-| **B2.8**  | **`PUT /api/profile/:id/default`（或 PATCH）** | 仅将指定画像设为默认，**幂等**；副作用：其余 `is_default=0`。验收：重复调用状态不变。                                                                                                                                                                                                                                                          | B2.5      |
-| **B2.9**  | **与推荐链路的接口**                                | **B3 依赖**：提供 **`GET /api/profile/default`** 或列表中明确默认项，供网关取 **默认 `profile_id` + 画像 JSON** 调内部 `personalized`。验收：无默认画像时 **404 + 明确错误码**（提示先创建），避免 B3 静默错推。                                                                                                                                                      | B2.4～B2.8 |
-| **B2.10** | **限流与大小**                                   | 对 **`POST/PUT`** 做轻量限流（同 B1 内存桶或 Redis），Body 上限与 **`express.json`** 一致；防止超大 `taboos`/`interests`。验收：超限 **413** 或 **400**。                                                                                                                                                                                     | B2.3      |
-| **B2.11** | **测试**                                      | **单元**：校验器 + `toRow`/`fromRow`。**集成**：登录 → 建 2 画像 → 列 → 改默认 → 更新 → 读详情。验收：`npm test` 新增 `profile.test.mjs`（或等价）绿灯。                                                                                                                                                                                            | B2.3～B2.9 |
-| **B2.12** | **文档同步**                                    | 实现后更新 **`api.md`** §2 已实现表与 Postman；**`prototype-spec.md`** §3 增正式路由行；本文篇首「当前开发状态」**API** 行去掉「B2 未编码」。验收：PR 内链接无死链。                                                                                                                                                                                           | B2.11     |
+| **B2.2**  | **迁移 / 映射落地**                               | **策略 A 已完成**：`002` + `migrate.js` 条件执行。验收：旧库 `npm run migrate` 后列名对齐。                                                                                                                        | B2.1、B0   |
+| **B2.3**  | **`POST /api/profile` 创建**                  | **已实现**：校验 + 首条强制默认 + `is_default` 互斥。                                                                                                                                                  | B2.2、B1.5 |
+| **B2.4**  | **`GET /api/profile` 列表**                   | **已实现**：`{ list, total }`；Query **`offset`/`limit`**（语义与 hot/personalized 分页一致，见 [api.md](api.md) §5.1）；分页 SQL 约定见 **§9.3.1**。                                                                                              | B2.3      |
+| **B2.5**  | **`GET /api/profile/:id` 详情**               | **已实现**：非本人 **404**。                                                                                                                                                                                               | B2.3      |
+| **B2.6**  | **`PUT /api/profile/:id` 更新**               | **已实现**：全量更新；唯一默认画像不可先取消默认（需先设他条默认）。                                                                                                                                                                                                              | B2.5      |
+| **B2.7**  | **`DELETE /api/profile/:id`（可选）**           | **已实现**：删默认后自动升一条为默认；仅剩一条 **409**。                                                                                                                                                                                                         | B2.5      |
+| **B2.8**  | **`PUT /api/profile/:id/default`（或 PATCH）** | **已实现**：`PUT .../:id/default`。                                                                                                                                                                                                                                                          | B2.5      |
+| **B2.9**  | **与推荐链路的接口**                                | **`GET /api/profile/default`** 已实现，供 **B3** 取 JSON。                                                                                                                                                      | B2.4～B2.8 |
+| **B2.10** | **限流与大小**                                   | **未做**（可选）：`POST/PUT` 专用限流；当前依赖全局 `express.json` 256kb。                                                                                                                                                                                     | B2.3      |
+| **B2.11** | **测试**                                      | **`profile.test.mjs`** 覆盖校验与 `rowToApiProfile`；集成测试可后续补。                                                                                                                                                                                            | B2.3～B2.9 |
+| **B2.12** | **文档同步**                                    | **`api.md`**、**`prototype-spec.md`**、Postman、**本文 §9.3.4**、篇首已更新。                                                                                                                                                                                           | B2.11     |
 
 #### 9.3.3 建议路由一览（Express 挂载示例）
 
@@ -284,49 +287,126 @@
 | `GET` | `/api/profile/default` | 当前用户默认画像（供 B3） |
 | `GET` | `/api/profile/:id` | 详情 |
 | `PUT` | `/api/profile/:id` | 更新 |
-| `DELETE` | `/api/profile/:id` | 可选删除 |
-| `PUT` | `/api/profile/:id/default` | 设为默认（可与 PATCH 合并设计） |
+| `DELETE` | `/api/profile/:id` | 删除（仅剩一条 **409**） |
+| `PUT` | `/api/profile/:id/default` | 设为默认（幂等；实现为 **PUT**，非 PATCH） |
 
 > **路径前缀**：可与现有 **`/api/user`** 并列挂载 **`/api/profile`**（`index.js`：`app.use('/api/profile', profileRouter)`），**均需 `requireAuth`**。
 
-#### 9.3.4 与 B3/B4 的交接面
+#### 9.3.4 B2 接口用法与自测（与 [api.md](api.md) 同步）
 
-- **B3**：读默认画像（或用户当前选中的 `profile_id`）→ 组装与 **`POST /api/personalized`** 相同的 **profile 对象** → 不调微信、不改分数字段名。  
-- **B4**：缓存失效 key 含 **`profile_id` 或 profile 内容 hash`**；**B2.6/B2.8 成功后** 必须 **`DEL`** 该用户相关 `recommend:*`（与 §8.3 一致）。
+**鉴权**：除登录外，以下全部 **`Authorization: Bearer <token>`**（先 **`POST /api/user/login`**）。**`user_id` 仅来自 JWT**；Body 勿传 `user_id`。
+
+| 方法 | 路径 | Query / Body / 说明 |
+|------|------|---------------------|
+| `GET` | `/api/profile` | Query：`offset`（默认 0）、`limit`（默认 20，最大 50）。响应 **`{ list, total }`**。 |
+| `POST` | `/api/profile` | Body：与 **`POST /api/personalized`** 画像段一致（camelCase）；必填 **`relation`、`ageBand`、`occasion`、`budget`**；**`interests`≤3**；可选 **`name`、`is_default`** 等。响应 **201**。首条强制默认；`is_default: true` 时清除同用户其它默认。 |
+| `GET` | `/api/profile/default` | 当前默认画像；无则 **404** `NO_DEFAULT_PROFILE`。 |
+| `GET` | `/api/profile/:id` | 详情；非本人或不存在 **404**。 |
+| `PUT` | `/api/profile/:id` | **全量更新**；校验同创建；唯一默认画像不可先取消默认（需先设他条默认）→ **400** 等见 [api.md](api.md) §4.3。 |
+| `PUT` | `/api/profile/:id/default` | 设为默认（幂等）。 |
+| `DELETE` | `/api/profile/:id` | 删默认后自动升一条为默认；仅剩一条 **409**。 |
+
+**推荐自测顺序**：`login` → **`GET /api/user/me`** → **`GET /api/profile`** → **`POST /api/profile`**（可建第二条）→ **`PUT /api/profile/:id/default`** → **`GET /api/profile/default`** → 按需 **`GET/PUT/DELETE /api/profile/:id`**。
+
+**Postman**：导入 **`prototype/postman/zhili-prototype.postman_collection.json`**；**[api.md](api.md) §10** 含环境变量 **`token`、`profile_id`** 与请求顺序 **3a～3e**（与集合内 B2 请求一致）。本地脚本与排错见 [prototype/README.md](prototype/README.md)「B1」「B2」。
+
+**与 H5**：`localStorage.zhili_profile` 直调 **`/api/personalized`** 仍可用；与 **`/api/profile`** 服务端持久化可并行（[api.md](api.md) §2 脚注）。
+
+#### 9.3.5 与 B3/B4 的交接面
+
+- **B3**：读默认画像（或用户当前选中的 `profile_id`）→ 组装与 **`POST /api/personalized`** 相同的 **profile 对象** → 不调微信、不改分数字段名；**细化任务与验收**见 **§9.4**。  
+- **B4**：对外 **`GET /api/recommend`**（`page`/`size`→`offset`/`limit`，§7.2）；缓存 key、TTL、画像变更失效、降级热门（§8.3）；**依赖 B3** 已明确「内核调用面」后再上 Redis，避免缓存层与打分实现双头维护。
 
 **与 develop1 表差异（本迭代可裁）**：develop1 `user` 含 `nickname` / `avatar_url`；当前 B0 表 **无** 此二列。B1 **最小闭环**可不落昵称头像；若产品要求「登录即写昵称」，则单加 **`002_user_profile_social.sql`** 或在 `user` 上 **`ALTER TABLE` 增列** 后再在登录或 **`getUserProfile`** 回调里更新（可划到 **B1.9 小迭代** 或 **B2 前**）。
 
 **建议顺序**：B0 → B1 →（B2 ∥ B9 部分读可先）→ B3 → B4 → B5 → B6 → B8；B7 视是否保留 H5 同源埋点再排；B10 贯穿收尾。
 
-**与 develop1 原 14 人天行的映射**：「数据库」≈ B0；「登录」≈ B1；「画像」≈ B2；「推荐打分」≈ B3（复用则减）；「Redis」≈ B4 一部分；「推荐 API」≈ B4 网关层；「商品 CRUD」≈ B9；「联盟」≈ B8；「收藏与事件」≈ B6 + B7。
+**与 develop1 原 14 人天行的映射**：「数据库」≈ B0；「登录」≈ B1；「画像」≈ B2；「推荐打分」≈ B3（**本仓库已将公式落在 `scoring.js`；B3 侧重「可迁移的复用面 + 与 B2 画像衔接」**，人天可减）；「Redis」≈ B4 一部分；「推荐 API」≈ B4 网关层；「商品 CRUD」≈ B9；「联盟」≈ B8；「收藏与事件」≈ B6 + B7。
 
-| 模块 | 任务 | 人天 | 负责人 |
-|------|------|------|--------|
-| 后端 | 数据库设计与初始化 | 1 | 后端 |
-| 后端 | 用户登录（微信） | 1 | 后端 |
-| 后端 | 画像 CRUD API | 2 | 后端 |
-| 后端 | 推荐打分函数实现 | 2 | 后端 |
-| 后端 | Redis 缓存集成 | 1 | 后端 |
-| 后端 | 推荐 API 开发 | 2 | 后端 |
-| 后端 | 商品 CRUD API | 1 | 后端 |
-| 后端 | 电商联盟对接 | 2 | 后端 |
-| 后端 | 收藏（`/api/favorite*`）与可选 `POST /api/event` | 2 | 后端 |
-| **后端合计** | | **14** | |
-| 前端 | 小程序搭建、登录页 | 1 | 前端 |
-| 前端 | 画像创建/编辑 | 3 | 前端 |
-| 前端 | 多画像管理页 | 2 | 前端 |
-| 前端 | 推荐首页（瀑布流+筛选） | 4 | 前端 |
-| 前端 | 商品详情页 | 2 | 前端 |
-| 前端 | 收藏列表页 | 2 | 前端 |
-| 前端 | 我的页面 | 1 | 前端 |
-| 前端 | 埋点上报集成 | 1 | 前端 |
-| **前端合计** | | **16** | |
-| 后台 | 商品管理页 | 2 | 全栈 |
-| 后台 | 简易数据看板 | 2 | 全栈 |
-| **后台合计** | | **4** | |
-| 测试与部署 | 功能/性能测试 | 3 | QA |
-| 测试与部署 | 小程序提审与发布 | 1 | 产品 |
-| **总计** | | **38** | |
+### 9.4 B3 推荐内核对接（目的、边界与 WBS）
+
+> **人天参照**：develop1 表「推荐打分函数实现」约 **2 人日**；在 **`scoring.js` 不重写、仅抽边界与接 B2** 的前提下，可压到 **约 0.5～1.5 人日**（余量进 B4/B10）。
+
+#### 9.4.0 本仓库落地快照（与代码同步）
+
+| 项 | 状态 |
+|----|------|
+| **`lib/recommendCore.js`** | **已具备**：顶筛、`parsePaging`、`runHotList`、`runPersonalizedList`、`enrich`、`pickHotOrPersonalized`、`apiProfileToScoringProfile`、`buildPersonalizedPayload` |
+| **`productsData.js`** | **已具备**：集中加载 **`products.json`**，供 **`index.js`** 与 **`routes/user.js`** 共用 |
+| **`GET /api/hot`、`POST /api/personalized`** | **已改为**调用 **`recommendCore`**（与旧行为一致，单测 **`scoring.test.mjs`** 仍覆盖公式） |
+| **`GET /api/user/recommend`** | **已具备**：Bearer → 读默认 **`user_profile`** → **`zhili_group`/`group`** 分流 → 返回 **`{ mode, list }`** |
+| **`recommendCore.test.mjs`** | **已具备**：分流、Body 拼装、hot 列表长度等 |
+| **可选余量** | **`/api/related/:id`** 是否迁入 **`recommendCore`**（当前仍在 **`index.js`**）；网关 **`packages/scoring`** 形态（多服务时再做） |
+
+#### 9.4.1 目的（为什么要做 B3）
+
+| 维度 | 说明 |
+|------|------|
+| **一致性** | 小程序 / 后续网关与 **`prototype/server`** 验证端必须使用 **同一套** **`computeScore`、`buildReasonLines`**（及商品 enrich 规则），避免线上与验证端各写一套公式导致 **PRD 4.3/4.4 漂移**。 |
+| **与 B2 闭环** | 用户登录后，推荐输入应能来自 **`GET /api/profile/default`**（或显式 **`profile_id`** → **`GET /api/profile/:id`**），而不仅依赖前端 **`localStorage`**；无默认画像时行为与产品约定一致（如 **404** 引导建画像，见 [api.md](api.md) §4.3）。 |
+| **为 B4 清障** | **B4** 负责 **`GET /api/recommend`** 外壳、**Redis**、限流与缓存失效（§8.3）。**B3** 先把「**画像 JSON + shelf + offset/limit → 列表结果**」这条链路在代码结构上 **定死、可测**，B4 只做缓存与路由聚合，避免「缓存键已上、内核还在改」的返工。 |
+
+#### 9.4.2 边界（B3 不包含）
+
+| 项 | 归属 |
+|----|------|
+| 对外 **`GET /api/recommend`**、域名、小程序公开路径 | **B4** |
+| **`Redis`**、`recommend:{user_id}:{profile_id}:…`、TTL、**`DEL` 失效** | **B4**（§8.3） |
+| **重写** PRD 打分子项或理由模板文案 | **禁止**划入 B3；若 PRD 变更，应先改 **`scoring.js` + 单测** 再谈迁移 |
+| **微信** `jscode2session`、JWT 签发 | **B1**（已完成） |
+
+#### 9.4.3 推荐实现形态（择一或组合，与 §7.3 一致）
+
+| 形态 | 适用 | 要点 |
+|------|------|------|
+| **A. 同进程模块** | 继续 **Express 单体** | 新建 **`services/recommendCore.js`**（或等价路径）：导出 **`buildPersonalizedBody(profileRow, shelf, offset, limit)`**、**`pickHotOrPersonalized({ group, … })`** 等纯函数；内部 **`import` `scoring.js`**，列表组装复用 **`index.js`** 中与 **`enrich`/`computeScore`** 一致的逻辑（可小幅抽取避免重复）。 |
+| **B. npm workspace / 内部包** | 多服务仓库 | 将 **`scoring.js` + 类型/常量** 抽到 **`packages/scoring`**，**`prototype/server`** 与网关 **同版本依赖**；发布前用 **同一份 golden 用例** 跑两边。 |
+| **C. 子进程调用** | 网关语言非 Node | **stdin/stdout JSON** 或 **HTTP localhost** 调现有 **`/api/personalized`**；契约锁定 **请求/响应 JSON** 与 [api.md](api.md) §5.3、§7。 |
+| **D. 子应用挂载** | 少改目录 | **`app.use('/internal', expressApp)`** 保留 **`/api/hot`**、**`/api/personalized`**；网关仅 **server-to-server** 调内部前缀。 |
+
+#### 9.4.4 子任务与验收（WBS）
+
+| 子项 | 任务 | 要点与验收 | 依赖 |
+|------|------|------------|------|
+| **B3.1** | **画像 → `personalized` Body** | **已实现路径**：**`apiProfileToScoringProfile`** + **`GET /api/user/recommend`** 内联路；**`buildPersonalizedPayload`** 供客户端/文档对齐。**验收**：与 [api.md](api.md) §5.3 **字段一致**（`recommendCore.test.mjs` 覆盖拼装形状）。 | B2.9、B1.5 |
+| **B3.2** | **对照组 / 实验组分流** | **已实现**：**`pickHotOrPersonalized`**（`A`→hot，其它→personalized）；Query **`zhili_group`/`group`** 见 [api.md](api.md) §4.2.1。**验收**：`/api/user/recommend?zhili_group=A` 与 **`/api/hot`** 同 shelf 分页时 **`list` 卡片序列一致**（`mode` 除外）。 | B3.1、B0 |
+| **B3.3** | **分页与首屏补足** | **已实现**：**`runPersonalizedList`** / **`runHotList`** 与 **`index.js` 原逻辑**一致。**验收**：与 **`POST /api/personalized`** 同 Body 时列表一致（集成对比可做余量）。 | B3.2 |
+| **B3.4** | **`/api/related/:id` 与画像** | **未迁入模块**（仍在 **`index.js`**，仍用 **`enrich`** import）；逻辑与 B3 画像对象同形。**验收**：行为与改前一致；若后续迁入 **`recommendCore`**，补回归测。 | B3.1 |
+| **B3.5** | **单测与防回归** | **`scoring.test.mjs`** + **`recommendCore.test.mjs`**。**可选**：DB 集成测「登录 → 建画像 → `/api/user/recommend`」。**验收**：`npm test` 绿灯。 | B3.1～B3.3 |
+| **B3.6** | **文档** | **已更新**：[api.md](api.md) §2、§4.2.1、§9、§10；[prototype-spec.md](prototype-spec.md)；[prototype/README.md](prototype/README.md)；Postman；本文 **§9.4.0**、篇首、§9.1。**B4** 实现时引用 **§9.4.3** 形态。 | B3.5 |
+
+#### 9.4.5 与 B2、B4 的接口约定（摘要）
+
+- **自 B2**：默认画像 **`GET /api/profile/default`**；多画像时由客户端或后续网关传 **`profile_id`** 再 **`GET /api/profile/:id`**（均需 **Bearer**）。  
+- **交 B4**：B3 产出稳定的 **「内核函数签名」或「内部 HTTP 路径 + 固定 JSON」**；B4 在 **`GET /api/recommend`** 内只做 **鉴权 → 取 profile → 调内核 → 包一层缓存 key**（§8.3）。
+
+| 模块       | 任务                                        | 人天     | 负责人 |
+| -------- | ----------------------------------------- | ------ | --- |
+| 后端       | 数据库设计与初始化                                 | 1      | 后端  |
+| 后端       | 用户登录（微信）                                  | 1      | 后端  |
+| 后端       | 画像 CRUD API                               | 2      | 后端  |
+| 后端       | 推荐打分函数实现                                  | 2      | 后端  |
+| 后端       | Redis 缓存集成                                | 1      | 后端  |
+| 后端       | 推荐 API 开发                                 | 2      | 后端  |
+| 后端       | 商品 CRUD API                               | 1      | 后端  |
+| 后端       | 电商联盟对接                                    | 2      | 后端  |
+| 后端       | 收藏（`/api/favorite*`）与可选 `POST /api/event` | 2      | 后端  |
+| **后端合计** |                                           | **14** |     |
+| 前端       | 小程序搭建、登录页                                 | 1      | 前端  |
+| 前端       | 画像创建/编辑                                   | 3      | 前端  |
+| 前端       | 多画像管理页                                    | 2      | 前端  |
+| 前端       | 推荐首页（瀑布流+筛选）                              | 4      | 前端  |
+| 前端       | 商品详情页                                     | 2      | 前端  |
+| 前端       | 收藏列表页                                     | 2      | 前端  |
+| 前端       | 我的页面                                      | 1      | 前端  |
+| 前端       | 埋点上报集成                                    | 1      | 前端  |
+| **前端合计** |                                           | **16** |     |
+| 后台       | 商品管理页                                     | 2      | 全栈  |
+| 后台       | 简易数据看板                                    | 2      | 全栈  |
+| **后台合计** |                                           | **4**  |     |
+| 测试与部署    | 功能/性能测试                                   | 3      | QA  |
+| 测试与部署    | 小程序提审与发布                                  | 1      | 产品  |
+| **总计**   |                                           | **38** |     |
 
 ---
 
@@ -585,4 +665,4 @@ flowchart TB
 
 [prd_v0.md](prd_v0.md) · [plan0.md](plan0.md) · [prototype-spec.md](prototype-spec.md) · [api.md](api.md) · [prototype/README.md](prototype/README.md)
 
-**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。
+**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4** 与 **§9.3.5**（及后续 **B4** 设计说明）。

@@ -121,6 +121,32 @@ icacls 'C:\ProgramData\DockerDesktop' /grant Administrators:F /t 2>$null
 
 `GET /api/health` 中会多 **`auth_configured`**（微信或 mock 已配置）、**`jwt_strong_secret`**（是否已换默认 JWT 密钥）。
 
+## B2 画像 CRUD（需登录）
+
+Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`POST /api/personalized`** 画像段一致，详见仓库根目录 **[api.md](../api.md) §4.3**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/profile` | 列表 `{ list, total }`；`offset`/`limit`（默认 20、最大 50） |
+| `POST` | `/api/profile` | 创建；首条强制默认；`interests` 最多 3 项 |
+| `GET` | `/api/profile/default` | 当前默认画像；无则 **404** |
+| `GET` | `/api/profile/:id` | 详情；非本人 **404** |
+| `PUT` | `/api/profile/:id` | 全量更新 |
+| `PUT` | `/api/profile/:id/default` | 设为默认 |
+| `DELETE` | `/api/profile/:id` | 删除；删默认后自动升一条；仅剩一条 **409** |
+
+**自测顺序**：`POST /api/user/login` → 带 Bearer 调 `GET /api/profile` → `POST /api/profile`（可建第二条）→ `PUT .../default` → `GET /api/profile/default`。Postman 见 **`postman/zhili-prototype.postman_collection.json`**（B2 请求在 `/me` 之后）。
+
+## B3 登录态推荐（默认画像 + 与 hot/personalized 同源）
+
+需 **Bearer** 且 MySQL 中已有 **默认画像**（可先完成 **B2** 创建一条）。详见仓库根目录 **[api.md](../api.md) §4.2.1**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/user/recommend` | Query：`occasion`、`budget`、`style`、`offset`、`limit`；**`zhili_group` 或 `group`**：`A`→热门 **`mode:"hot"`**，`B`/缺省→个性化 **`mode:"personalized"`**（画像来自 DB 默认行）。无默认画像 **404**。 |
+
+**自测**：`login` → `POST /api/profile`（若尚无画像）→ **`GET /api/user/recommend?zhili_group=B&...`** → 改 **`zhili_group=A`** 对照热门列表。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell

@@ -185,6 +185,12 @@
   },
   "active": "9477fb9291d28cc7",
   "lastOpenFiles": [
+    "prototype/server/recommendCore.test.mjs",
+    "prototype/server/lib/recommendCore.js",
+    "prototype/server/productsData.js",
+    "prototype/server/profile.test.mjs",
+    "prototype/server/routes/profile.js",
+    "prototype/server/lib/profileSchema.js",
     "prototype-client-App-vue.md",
     "prototype-README.md",
     "develop2.md",
@@ -194,11 +200,6 @@
     "prototype/server/migrations/001_b0_schema.sql",
     "prototype/server/migrations",
     "prototype/server/seed.js",
-    "prototype/server/migrate.js",
-    "prototype/server/node_modules/mysql2/typings/mysql/lib/protocol/sequences/promise/QueryableBase.d.ts",
-    "prototype/server/node_modules/mysql2/typings/mysql/lib/protocol/sequences/promise/ExecutableBase.d.ts",
-    "prototype/server/node_modules/mysql2/typings/mysql/lib/protocol/packets/params/OkPacketParams.d.ts",
-    "prototype/server/node_modules/mysql2/typings/mysql/lib/protocol/packets/params/ErrorPacketParams.d.ts",
     "prototype/server/node_modules/mysql2/node_modules/iconv-lite/README.md",
     "prototype/server/node_modules/mysql2/lib/auth_plugins/caching_sha2_password.md",
     "prototype/server/node_modules/mysql2/README.md",
@@ -219,7 +220,6 @@
     "prototype/server/node_modules/sql-escaper/README.md",
     "prototype/server/node_modules/named-placeholders/README.md",
     "prototype/server/node_modules/lru.min/README.md",
-    "prototype/server/node_modules/long/README.md",
-    "prototype/server/node_modules/generate-function/README.md"
+    "prototype/server/node_modules/long/README.md"
   ]
 }

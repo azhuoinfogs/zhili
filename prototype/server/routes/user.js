@@ -3,6 +3,16 @@ import { getPool, query, execute } from '../db.js';
 import { exchangeJsCode } from '../lib/wechat.js';
 import { signUserToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
+import { rowToApiProfile } from '../lib/profileSchema.js';
+import { productsData } from '../productsData.js';
+import {
+  parsePaging,
+  shelfFromQuery,
+  pickHotOrPersonalized,
+  apiProfileToScoringProfile,
+  runHotList,
+  runPersonalizedList,
+} from '../lib/recommendCore.js';
 
 const router = Router();
 
@@ -102,6 +112,44 @@ router.get('/me', requireAuth, async (req, res) => {
       return;
     }
     res.json({ user: rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
+});
+
+/** B3：登录用户用默认画像 + 顶筛 + 实验组，走与 hot/personalized 同一内核 */
+router.get('/recommend', requireAuth, async (req, res) => {
+  if (!getPool()) {
+    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
+  const q = req.query || {};
+  const { limit, offset } = parsePaging(q);
+  const shelf = shelfFromQuery(q);
+  const mode = pickHotOrPersonalized(q.zhili_group ?? q.group);
+  try {
+    const rows = await query(
+      `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
+       FROM user_profile WHERE user_id = ? AND is_default = 1 ORDER BY id ASC LIMIT 1`,
+      [req.userId]
+    );
+    if (!rows.length) {
+      res.status(404).json({ error: 'NO_DEFAULT_PROFILE', message: '请先创建画像并设为默认' });
+      return;
+    }
+    const apiProfile = rowToApiProfile(rows[0]);
+    if (mode === 'hot') {
+      res.json({
+        mode: 'hot',
+        list: runHotList(productsData, shelf, offset, limit),
+      });
+      return;
+    }
+    const profile = apiProfileToScoringProfile(apiProfile);
+    res.json({
+      mode: 'personalized',
+      list: runPersonalizedList(productsData, profile, shelf, offset, limit),
+    });
   } catch (e) {
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }

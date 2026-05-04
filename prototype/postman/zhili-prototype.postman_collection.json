@@ -1,13 +1,14 @@
 {
   "info": {
     "_postman_id": "c4f8a1b2-3d5e-6f70-8a9b-0c1d2e3f4a5b",
-    "name": "知礼 prototype（B0+B1+验证流）",
-    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；在 Environment 中建同名 `token` 或在 Login 的 Tests 里改用 `pm.collectionVariables.set`。B1 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
+    "name": "知礼 prototype（B0+B1+B2+B3+验证流）",
+    "description": "与仓库 api.md §10 一致。导入后请设置 Collection Variable `base_url`（含端口）；`token` 由 Login Tests 写入；B2 的 `profile_id` 可由「POST /api/profile (B2)」Tests 写入。B3「GET /api/user/recommend」需先有一条默认画像。B1/B2/B3 需 MySQL + `.env` 中 `WECHAT_MOCK=1` 或微信密钥。",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "base_url", "value": "http://127.0.0.1:3000" },
-    { "key": "token", "value": "" }
+    { "key": "token", "value": "" },
+    { "key": "profile_id", "value": "" }
   ],
   "item": [
     {
@@ -59,6 +60,104 @@
         "header": [],
         "url": "{{base_url}}/api/user/me",
         "description": "Bearer 使用 Collection 或 Environment 中的 `token`（先跑 Login）。"
+      }
+    },
+    {
+      "name": "GET /api/user/recommend (B3)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/user/recommend?occasion=birthday&budget=100-300&style=practical&offset=0&limit=10&zhili_group=B",
+        "description": "需先 Login，且已有默认画像（可先 POST /api/profile）。响应含 mode 与 list（ProductCard[]）。zhili_group=A 为热门对照。"
+      }
+    },
+    {
+      "name": "GET /api/profile (B2)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/profile?offset=0&limit=20",
+        "description": "需先 Login。返回 `{ list, total }`。"
+      }
+    },
+    {
+      "name": "POST /api/profile (B2)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "if (pm.response.code === 201) {",
+              "  try {",
+              "    const j = pm.response.json();",
+              "    if (j.profile && j.profile.id != null) pm.collectionVariables.set('profile_id', String(j.profile.id));",
+              "  } catch (e) {}",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Postman 画像\",\n  \"is_default\": false,\n  \"relation\": \"friend\",\n  \"ageBand\": \"26-35\",\n  \"interests\": [\"tech\"],\n  \"occasion\": \"birthday\",\n  \"budget\": \"100-300\",\n  \"gender\": \"male\",\n  \"style\": \"practical\",\n  \"taboos\": []\n}"
+        },
+        "url": "{{base_url}}/api/profile",
+        "description": "首条画像时服务端会强制默认；多画像时可设 `is_default`。成功 **201** 时 Tests 写入 `profile_id`。"
+      }
+    },
+    {
+      "name": "GET /api/profile/default (B2)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/profile/default",
+        "description": "无默认画像时 **404**（`NO_DEFAULT_PROFILE`）。"
+      }
+    },
+    {
+      "name": "GET /api/profile/:id (B2)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "GET",
+        "header": [],
+        "url": "{{base_url}}/api/profile/{{profile_id}}",
+        "description": "请先跑「POST /api/profile」以写入 `profile_id`，或手填 Collection Variable。"
+      }
+    },
+    {
+      "name": "PUT /api/profile/:id/default (B2)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+        },
+        "method": "PUT",
+        "header": [],
+        "url": "{{base_url}}/api/profile/{{profile_id}}/default",
+        "description": "将指定画像设为默认（需有效 `profile_id`）。"
       }
     },
     {
