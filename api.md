@@ -13,7 +13,7 @@
 | **前缀** | 除导出 CSV 外，业务接口均在 **`/api`** 下 |
 | **JSON** | `Content-Type: application/json`；请求体上限约 **256KB** |
 | **CORS** | 开发态已开启，跨域按部署环境自行收紧 |
-| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；`hot`/`personalized`/`collect` 等仍可不登录 |
+| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；**`GET /api/product/:id`** 为 **可选 Bearer**（见 **§4.2.3**）；`hot`/`personalized`/`collect` 等仍可不登录 |
 
 ### 1.1 重要：埋点与收藏路径（develop2 §7.1）
 
@@ -33,6 +33,7 @@
 | `GET` | `/api/user/me` | B1：当前登录用户；Bearer JWT |
 | `GET` | `/api/user/recommend` | **B3**：用 **默认画像** + 顶筛 + 分页返回商品卡；Query **`zhili_group`/`group`**（`A`→热门、`B`/缺省→个性化）；无默认画像 **404**；Bearer |
 | `GET` | `/api/recommend` | **B4**：网关分页 **`page`/`size`** + 顶筛 + **`zhili_group`/`group`**；可选 **`profile_id`**（缺省=默认画像）；**Redis** 缓存 **600s**（无 Redis 则降级）；**Bearer** |
+| `GET` | `/api/product/:id` | **B5**：商品详情（**ProductDetail**，见 **§4.2.3**）；**可选 Bearer**；可选 **`profile`** Query；**Redis** 详情缓存 **180s**（可配 **`PRODUCT_DETAIL_CACHE_TTL_SEC`**，无 Redis 则跳过） |
 | `GET` | `/api/hot` | 对照组热门列表 + 顶筛 + 分页 |
 | `POST` | `/api/personalized` | 实验组个性化列表 + 顶筛 + 分页 |
 | `GET` | `/api/related/:id` | 类似推荐（最多 8 条） |
@@ -208,6 +209,37 @@
 
 实现：**`routes/recommend.js`**；缓存：**`lib/recommendCache.js`**。
 
+### 4.2.3 `GET /api/product/:id`（B5 · 商品详情）
+
+**说明**：详情页主接口；**`enrich`/`buildReasonLines`** 与 **`GET /api/hot`** / 列表 **§7 `ProductCard`** 同源。商品主体优先 **`product` 表**，查询失败或未命中时回退 **`products.json`**（与 **`GET /api/related/:id`** 经 **`resolveProductById`** 对齐，develop2 **§9.6**）。
+
+**鉴权**：**不强制**。若带 **`Authorization: Bearer`** 且 token 合法，且无 **`profile`** Query 时，服务端用该用户 **B2 默认画像** 生成 **`reasons`**；若 **同时** 提供 **`profile`** Query，则 **仅以 Query 画像为准**（便于联调）。若 Bearer **格式有但 token 无效** → **401**。
+
+**路径**：`:id` 须匹配 **`^[a-zA-Z0-9_-]{1,32}$`**，否则 **400** `BAD_REQUEST`。
+
+**Query**：
+
+| 参数 | 说明 |
+|------|------|
+| `profile` | 可选；**JSON 字符串**，语义与 **`GET /api/related/:id?profile=`** 一致（与 **`POST /api/personalized`** 画像段同形字段，用于个性化 **`reasons`**） |
+
+**成功 200**：**`ProductDetail`** = **§7** 全部字段，外加只读标签与转链占位：
+
+| 字段 | 说明 |
+|------|------|
+| §7 已有 | `id`、`title`、`price`、`image`、`images`、`sellPoint`、`reasons` |
+| 扩展 | `occasions`、`styles`、`interests`、`gender`、`ageBands`、`taboosAvoid`、`hotRank`、`occasionKeyword`、`affiliateUrl`（库中无则为 `null`） |
+
+**缓存（B5.9）**：Redis key **`product:detail:v1:{id}:{variant}`**，`variant` 区分 **`profile` Query**（`q:`+hash）与 **Bearer 默认画像**（`u:{userId}`）与匿名（`none`）；**TTL** 默认 **180s**；读写失败时跳过缓存仍 **200**。**B9** 写商品后可调用 **`invalidateProductDetailById`**（`lib/productDetailCache.js`）清理该 `id` 下全部 variant。
+
+| HTTP | `error` | 说明 |
+|------|---------|------|
+| 400 | `BAD_REQUEST` | 非法 `id` |
+| 404 | `NOT_FOUND` | 商品不存在（**JSON 对象**，与 **`/api/related`** 空数组 **404** 历史行为不同） |
+| 401 | `UNAUTHORIZED` | Bearer 存在但 JWT 无效 |
+
+实现：**`routes/product.js`**；**`lib/productMapper.js`**、**`lib/productResolve.js`**、**`lib/productDetailCache.js`**；可选鉴权：**`middleware/optionalAuth.js`**。
+
 ### 4.3 B2 画像 CRUD（`/api/profile*`）
 
 **鉴权**：全部 **`Authorization: Bearer <token>`**；**`user_id` 仅来自 JWT**，Body 勿传 `user_id`。
@@ -319,7 +351,7 @@
 
 ## 7. 商品卡片对象 `ProductCard`
 
-列表与类似推荐中每条商品经 `enrich` 后形状如下（字段名与前端契约一致）：
+列表、**`GET /api/product/:id`**、类似推荐中每条商品经 `enrich` 后，**卡片段**形状如下（字段名与前端契约一致）；详情在卡片基础上另有扩展字段，见 **§4.2.3**。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -335,15 +367,14 @@
 
 ---
 
-## 8. 规划中接口（验证端尚未实现）
+## 8. 规划中接口（仍待实现）
 
-与 develop2 **§7.2、§9.1** 对齐。**B2 `/api/profile*`** 见 **§2**、**§4.3**。**B3** **`GET /api/user/recommend`** 见 **§4.2.1**；**B4** **`GET /api/recommend`** 见 **§2**、**§4.2.2**（Redis 与失效见 [develop2.md](develop2.md) **§9.5**）。
+下表为 **尚未** 在验证端落地的端点；**B5** **`GET /api/product/:id`** 已实现，见 **§2**、**§4.2.3**（develop2 **§9.6**）。**B2～B4** 见 **§2**、**§4.2.x** / **§4.3**（[develop2.md](develop2.md) **§9.5** 等）。
 
 ### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
-| `GET /api/product/:id` | **B5** |
 | `POST/DELETE /api/favorite`、`GET /api/favorite/list` | **B6** |
 | `GET /api/purchase/url` | **B8** 联盟转链 |
 | `POST /api/event` | **B7** 可选入库 |
@@ -355,8 +386,14 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend` 路由挂载** |
-| `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4 复用） |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend`**、**`/api/product`** |
+| `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4/**B5** 复用） |
+| `prototype/server/routes/product.js` | **B5**：**`GET /api/product/:id`** |
+| `prototype/server/lib/productMapper.js` | **B5**：`product` 表行 → 内核对象 |
+| `prototype/server/lib/productResolve.js` | **B5**：**`resolveProductById`**（DB→内存回退） |
+| `prototype/server/lib/productDetailCache.js` | **B5.9**：详情 Redis key、**TTL**、**`invalidateProductDetailById`** |
+| `prototype/server/lib/relatedCore.js` | **B5.5**：**`/api/related`** 相似品排序 |
+| `prototype/server/middleware/optionalAuth.js` | **B5**：可选 Bearer，写入 `req.userId` |
 | `prototype/server/lib/recommendCore.js` | **B3/B4**：hot/personalized 共用内核、`pickHotOrPersonalized` 等 |
 | `prototype/server/lib/recommendCache.js` | **B4**：推荐列表 Redis key、**TTL**、**`invalidateUserRecommendations`** |
 | `prototype/server/routes/recommend.js` | **B4**：**`GET /api/recommend`** |
@@ -379,7 +416,7 @@
 2. **确认端口**：默认 `3000`；若顺延，读 **`prototype/server/.listen-port`**，Postman 里 **`{{base_url}}`** 与之对齐。  
 3. **本地登录（无微信密钥）**：在 **`prototype/server/.env`** 中设置 **`WECHAT_MOCK=1`**，否则 `POST /api/user/login` 会返回 **`WECHAT_NOT_CONFIGURED`**（503）。  
 4. **可选**：设置 **`JWT_SECRET`** 为随机长串，便于 `GET /api/health` 里 **`jwt_strong_secret`** 为 `true`（与生产习惯一致）。  
-5. **Redis（B4 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`** 仍可用，只是无缓存命中。
+5. **Redis（B4 / B5 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`**、**`GET /api/product/:id`** 仍 **200**，只是无缓存命中。
 
 ### 10.2 Postman 环境变量
 
@@ -402,6 +439,7 @@
 | 3 | `GET` | `{{base_url}}/api/user/me` | **Authorization → Type: Bearer Token**，Token 填 **`{{token}}`**（勿手写 `Bearer` 前缀，Postman 会自动加） |
 | 3r | `GET` | `{{base_url}}/api/user/recommend?occasion=birthday&budget=100-300&style=practical&offset=0&limit=10&zhili_group=B` | **Bearer**；**B3**；需已有默认画像 |
 | 3g | `GET` | `{{base_url}}/api/recommend?page=1&size=10&occasion=birthday&budget=100-300&style=practical&zhili_group=B` | **Bearer**；**B4**；需默认画像；第二次 Send 可验证 Redis 命中（若已起 Redis） |
+| 3p | `GET` | `{{base_url}}/api/product/p001` | **无 Auth** 或 **Bearer**（登录且含默认画像时 `reasons` 更匹配）；**B5**；第二次 Send 可验证详情 Redis（若已起 Redis） |
 | 3a | `GET` | `{{base_url}}/api/profile?offset=0&limit=20` | **Bearer** `{{token}}`；**B2** 列表 |
 | 3b | `POST` | `{{base_url}}/api/profile` | **Bearer**；Body 与 **§4.3** 画像字段一致；**201** 时 Tests 可写 **`profile_id`** |
 | 3c | `GET` | `{{base_url}}/api/profile/default` | **Bearer**；无默认时 **404** |
@@ -477,8 +515,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）**、**`GET /api/product/:id`（B5，可选 Bearer）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`** + **B5** **`GET /api/product/:id`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。

@@ -157,6 +157,16 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 **自测**：完成 B3 自测链路后 → **`GET /api/recommend?page=1&size=10&...`** 连发两次（起 Redis 时第二次更易命中缓存）→ **`PUT /api/profile/:id`** 后再 GET，列表应随新画像更新。
 
+## B5 商品详情（`GET /api/product/:id`）
+
+**可不登录**；带 **`profile`** Query（JSON 字符串，与 **`/api/related`** 一致）或带 **Bearer** 且已有 **默认画像** 时，**`reasons`** 与画像对齐。详见 **[api.md](../api.md) §4.2.3**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/product/:id` | 路径 `:id` 如 **`p001`**；响应为 **ProductDetail**（§7 卡片字段 + 标签与 **`affiliateUrl`**）。**Redis** 短缓存默认 **180s**（环境变量 **`PRODUCT_DETAIL_CACHE_TTL_SEC`** 可改）。 |
+
+**自测**：**`GET /api/product/p001`**（无 Auth）→ 带 **Bearer** 再 GET（需默认画像，理由可能变化）→ 起 Redis 时同一 URL 连发两次观察命中。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell

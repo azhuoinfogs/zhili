@@ -8,14 +8,17 @@ import { initDatabase, initRedis, getPool, getRedis, query } from './db.js';
 import userRouter from './routes/user.js';
 import profileRouter from './routes/profile.js';
 import recommendRouter from './routes/recommend.js';
+import productRouter from './routes/product.js';
 import { productsData } from './productsData.js';
+import { resolveProductById } from './lib/productResolve.js';
+import { relatedProductCards } from './lib/relatedCore.js';
+import { parseProfileFromQuery } from './routes/product.js';
 import {
   parsePaging,
   shelfFromQuery,
   runHotList,
   runPersonalizedList,
   parsePagingFromBody,
-  enrich,
 } from './lib/recommendCore.js';
 import { wechatAuthConfigured } from './lib/wechat.js';
 import { jwtConfigured } from './lib/jwt.js';
@@ -62,6 +65,7 @@ app.use(express.json({ limit: '256kb' }));
 app.use('/api/user', userRouter);
 app.use('/api/profile', profileRouter);
 app.use('/api/recommend', recommendRouter);
+app.use('/api/product', productRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
@@ -80,45 +84,20 @@ app.post('/api/personalized', (req, res) => {
   res.json(runPersonalizedList(productsData, profile, shelfQ, offset, limit));
 });
 
-app.get('/api/related/:id', (req, res) => {
+app.get('/api/related/:id', async (req, res) => {
   const id = req.params.id;
-  const self = productsData.find((p) => p.id === id);
-  if (!self) {
-    res.status(404).json([]);
-    return;
+  try {
+    const resolved = await resolveProductById(id, productsData);
+    if (!resolved) {
+      res.status(404).json([]);
+      return;
+    }
+    const profile = parseProfileFromQuery(req.query);
+    res.json(relatedProductCards(productsData, resolved.product, profile));
+  } catch (e) {
+    console.error('[知礼] /api/related 失败:', e.message);
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }
-  let profile = null;
-  if (req.query.profile) {
-    try {
-      profile = JSON.parse(String(req.query.profile));
-    } catch {
-      profile = null;
-    }
-  }
-  function overlapScore(a, b) {
-    let s = 0;
-    const oa = new Set(a.occasions || []);
-    for (const o of b.occasions || []) {
-      if (oa.has(o)) s += 3;
-    }
-    const ia = new Set(a.interests || []);
-    for (const i of b.interests || []) {
-      if (ia.has(i)) s += 2;
-    }
-    const sa = new Set(a.styles || []);
-    for (const st of b.styles || []) {
-      if (sa.has(st)) s += 2;
-    }
-    s += (300 - Math.min(b.hotRank ?? 300, 300)) * 0.01;
-    return s;
-  }
-  const list = productsData
-    .filter((p) => p.id !== id)
-    .map((p) => ({ p, s: overlapScore(self, p) }))
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 8)
-    .map((x) => enrich(x.p, profile));
-  res.json(list);
 });
 
 function ensureCsvHeader() {
