@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { getPool, query } from '../db.js';
+import { getPool, query, getRedis } from '../db.js';
+import { invalidateUserRecommendations } from '../lib/recommendCache.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import {
   validateProfileBody,
@@ -108,6 +109,7 @@ router.post('/', async (req, res) => {
       ]
     );
     await conn.commit();
+    await invalidateUserRecommendations(getRedis(), req.userId);
     const id = ins.insertId;
     const rows = await query(
       `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
@@ -150,6 +152,7 @@ router.put('/:id/default', async (req, res) => {
     await conn.execute('UPDATE user_profile SET is_default = 0 WHERE user_id = ?', [req.userId]);
     await conn.execute('UPDATE user_profile SET is_default = 1 WHERE id = ? AND user_id = ?', [id, req.userId]);
     await conn.commit();
+    await invalidateUserRecommendations(getRedis(), req.userId);
     const rows = await query(
       `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
        FROM user_profile WHERE id = ? LIMIT 1`,
@@ -255,6 +258,7 @@ router.put('/:id', async (req, res) => {
       ]
     );
     await conn.commit();
+    await invalidateUserRecommendations(getRedis(), req.userId);
     const rows = await query(
       `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
        FROM user_profile WHERE id = ? LIMIT 1`,
@@ -311,6 +315,7 @@ router.delete('/:id', async (req, res) => {
       }
     }
     await conn.commit();
+    await invalidateUserRecommendations(getRedis(), req.userId);
     res.json({ ok: true });
   } catch (e) {
     await conn.rollback();

@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node index.js",
-    "test": "node --test scoring.test.mjs auth.test.mjs profile.test.mjs recommendCore.test.mjs",
+    "test": "node --test scoring.test.mjs auth.test.mjs profile.test.mjs recommendCore.test.mjs recommend.test.mjs",
     "migrate": "node migrate.js",
     "seed": "node seed.js",
     "init-db": "node migrate.js && node seed.js"

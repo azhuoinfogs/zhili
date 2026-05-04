@@ -13,7 +13,7 @@
 | **前缀** | 除导出 CSV 外，业务接口均在 **`/api`** 下 |
 | **JSON** | `Content-Type: application/json`；请求体上限约 **256KB** |
 | **CORS** | 开发态已开启，跨域按部署环境自行收紧 |
-| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；`hot`/`personalized`/`collect` 等仍可不登录 |
+| **鉴权** | **`GET /api/user/me`**、**`GET /api/user/recommend`**、**`GET /api/recommend`** 与 **`/api/profile` 下全部路由** 要求 **`Authorization: Bearer <JWT>`**；`hot`/`personalized`/`collect` 等仍可不登录 |
 
 ### 1.1 重要：埋点与收藏路径（develop2 §7.1）
 
@@ -32,6 +32,7 @@
 | `POST` | `/api/user/login` | B1：微信 `code` 换会话；需 MySQL |
 | `GET` | `/api/user/me` | B1：当前登录用户；Bearer JWT |
 | `GET` | `/api/user/recommend` | **B3**：用 **默认画像** + 顶筛 + 分页返回商品卡；Query **`zhili_group`/`group`**（`A`→热门、`B`/缺省→个性化）；无默认画像 **404**；Bearer |
+| `GET` | `/api/recommend` | **B4**：网关分页 **`page`/`size`** + 顶筛 + **`zhili_group`/`group`**；可选 **`profile_id`**（缺省=默认画像）；**Redis** 缓存 **600s**（无 Redis 则降级）；**Bearer** |
 | `GET` | `/api/hot` | 对照组热门列表 + 顶筛 + 分页 |
 | `POST` | `/api/personalized` | 实验组个性化列表 + 顶筛 + 分页 |
 | `GET` | `/api/related/:id` | 类似推荐（最多 8 条） |
@@ -135,7 +136,7 @@
 
 ### 4.2.1 `GET /api/user/recommend`（B3 · 与默认画像衔接）
 
-**说明**：登录用户 **一条请求** 拉推荐列表：服务端读取 **`user_profile` 默认行**，再调用与 **`GET /api/hot`** / **`POST /api/personalized`** **同一套** `lib/recommendCore.js` 逻辑（develop2 **§9.4**）。**不是** 对外的 **`GET /api/recommend`**（B4 网关）。
+**说明**：登录用户 **一条请求** 拉推荐列表：服务端读取 **`user_profile` 默认行**，再调用与 **`GET /api/hot`** / **`POST /api/personalized`** **同一套** `lib/recommendCore.js` 逻辑（develop2 **§9.4**）。**对外网关**见 **`GET /api/recommend`**（**§4.2.2**，B4：分页 **`page`/`size`** + Redis）。
 
 **鉴权**：`Authorization: Bearer <token>`。
 
@@ -166,6 +167,46 @@
 | 503 | `DB_UNAVAILABLE` | 无数据库 |
 
 实现：**`routes/user.js`**；内核：**`lib/recommendCore.js`**；商品池：**`productsData.js`**。
+
+### 4.2.2 `GET /api/recommend`（B4 · 网关 + Redis）
+
+**说明**：develop1 / 小程序主路径式推荐入口：**`page`/`size`** 分页，内部 **`offset=(page-1)*size`，`limit=size`**；列表计算与 **B3** 同源（**`lib/recommendCore.js`**）。**Redis** 命中时直接返回缓存 JSON；**无 Redis 或 Redis 异常**时跳过缓存仍 **200**。**B2** 写画像成功后服务端 **`DEL recommend:{user_id}:*`**（见 **`lib/recommendCache.js`**）。
+
+**鉴权**：`Authorization: Bearer <token>`。
+
+**Query**：
+
+| 参数 | 默认 | 说明 |
+|------|------|------|
+| `page` | `1` | ≥1 |
+| `size` | `20` | 1～50，即每页条数 |
+| `occasion` | （空） | 顶筛 |
+| `budget` | （空） | 顶筛 |
+| `style` | （空） | 顶筛 |
+| `zhili_group` 或 `group` | `B` | **`A`**→**`mode:"hot"`**；**`B`**/缺省→**`mode:"personalized"`** |
+| `profile_id` | （缺省） | 指定画像主键；须属于当前用户；缺省=**默认画像** |
+
+**成功 200**：
+
+```json
+{
+  "list": [],
+  "page": 1,
+  "size": 20,
+  "mode": "personalized"
+}
+```
+
+`list` 为 **ProductCard[]**（§7）。缓存 key：`recommend:{user_id}:{profile_id}:{filter_hash}`，`filter_hash` = **`SHA256(occasion|budget|style|group)` 前 12 位**（develop2 §8.3），**TTL 600s**。
+
+| HTTP | `error` | 说明 |
+|------|---------|------|
+| 404 | `NO_DEFAULT_PROFILE` | 未指定 `profile_id` 且无默认画像 |
+| 404 | `NOT_FOUND` | `profile_id` 不存在或非本人 |
+| 401 | `UNAUTHORIZED` | 同 §4.2 |
+| 503 | `DB_UNAVAILABLE` | 无数据库 |
+
+实现：**`routes/recommend.js`**；缓存：**`lib/recommendCache.js`**。
 
 ### 4.3 B2 画像 CRUD（`/api/profile*`）
 
@@ -294,15 +335,14 @@
 
 ---
 
-## 8. 规划中接口（未在验证端实现）
+## 8. 规划中接口（验证端尚未实现）
 
-与 develop2 **§7.2、§9.1** 对齐。**B2 `/api/profile*`** 见 **§2**、**§4.3**。**B3** 已部分落地 **`GET /api/user/recommend`**（§4.2.1）；**`GET /api/recommend`** 仍为 **B4**。
+与 develop2 **§7.2、§9.1** 对齐。**B2 `/api/profile*`** 见 **§2**、**§4.3**。**B3** **`GET /api/user/recommend`** 见 **§4.2.1**；**B4** **`GET /api/recommend`** 见 **§2**、**§4.2.2**（Redis 与失效见 [develop2.md](develop2.md) **§9.5**）。
 
 ### 8.1 其余 MVP 端点
 
 | MVP 规划目标（develop2 §9） | 说明 |
 |---------------------|------|
-| `GET /api/recommend` | **B4**；`page`/`size` → `offset`/`limit`，内调 hot/personalized |
 | `GET /api/product/:id` | **B5** |
 | `POST/DELETE /api/favorite`、`GET /api/favorite/list` | **B6** |
 | `GET /api/purchase/url` | **B8** 联盟转链 |
@@ -315,11 +355,13 @@
 
 | 路径 | 内容 |
 |------|------|
-| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related` |
-| `prototype/server/productsData.js` | 加载 **`products.json`**（B3 与用户推荐复用） |
-| `prototype/server/lib/recommendCore.js` | **B3**：hot/personalized 共用内核、`pickHotOrPersonalized` 等 |
+| `prototype/server/index.js` | Express 挂载；`hot`/`personalized`/`related`；**`/api/recommend` 路由挂载** |
+| `prototype/server/productsData.js` | 加载 **`products.json`**（B3/B4 复用） |
+| `prototype/server/lib/recommendCore.js` | **B3/B4**：hot/personalized 共用内核、`pickHotOrPersonalized` 等 |
+| `prototype/server/lib/recommendCache.js` | **B4**：推荐列表 Redis key、**TTL**、**`invalidateUserRecommendations`** |
+| `prototype/server/routes/recommend.js` | **B4**：**`GET /api/recommend`** |
 | `prototype/server/routes/user.js` | 登录、限流、`/me`、**`/recommend`（B3）** |
-| `prototype/server/routes/profile.js` | **B2** 画像 CRUD |
+| `prototype/server/routes/profile.js` | **B2** 画像 CRUD；写成功后 **B4 缓存失效** |
 | `prototype/server/lib/profileSchema.js` | B2 校验与行列映射 |
 | `prototype/server/middleware/requireAuth.js` | Bearer JWT |
 | `prototype/server/lib/jwt.js` / `lib/wechat.js` | JWT 与微信 / mock |
@@ -336,7 +378,8 @@
 1. **MySQL**：B1 依赖库连接。在 `prototype` 目录执行 **`npm run dev:db`**（或本机已有 MySQL 且 `server/.env` 中 **`DB_*`** 正确），再 **`cd prototype/server && npm start`**。  
 2. **确认端口**：默认 `3000`；若顺延，读 **`prototype/server/.listen-port`**，Postman 里 **`{{base_url}}`** 与之对齐。  
 3. **本地登录（无微信密钥）**：在 **`prototype/server/.env`** 中设置 **`WECHAT_MOCK=1`**，否则 `POST /api/user/login` 会返回 **`WECHAT_NOT_CONFIGURED`**（503）。  
-4. **可选**：设置 **`JWT_SECRET`** 为随机长串，便于 `GET /api/health` 里 **`jwt_strong_secret`** 为 `true`（与生产习惯一致）。
+4. **可选**：设置 **`JWT_SECRET`** 为随机长串，便于 `GET /api/health` 里 **`jwt_strong_secret`** 为 `true`（与生产习惯一致）。  
+5. **Redis（B4 缓存）**：`prototype` 下 **`npm run dev:db`** 会起 **Redis**；仅 MySQL 时 **`GET /api/recommend`** 仍可用，只是无缓存命中。
 
 ### 10.2 Postman 环境变量
 
@@ -358,6 +401,7 @@
 | 2 | `POST` | `{{base_url}}/api/user/login` | Body **raw JSON**，见下表；**Tests** 脚本保存 `token` |
 | 3 | `GET` | `{{base_url}}/api/user/me` | **Authorization → Type: Bearer Token**，Token 填 **`{{token}}`**（勿手写 `Bearer` 前缀，Postman 会自动加） |
 | 3r | `GET` | `{{base_url}}/api/user/recommend?occasion=birthday&budget=100-300&style=practical&offset=0&limit=10&zhili_group=B` | **Bearer**；**B3**；需已有默认画像 |
+| 3g | `GET` | `{{base_url}}/api/recommend?page=1&size=10&occasion=birthday&budget=100-300&style=practical&zhili_group=B` | **Bearer**；**B4**；需默认画像；第二次 Send 可验证 Redis 命中（若已起 Redis） |
 | 3a | `GET` | `{{base_url}}/api/profile?offset=0&limit=20` | **Bearer** `{{token}}`；**B2** 列表 |
 | 3b | `POST` | `{{base_url}}/api/profile` | **Bearer**；Body 与 **§4.3** 画像字段一致；**201** 时 Tests 可写 **`profile_id`** |
 | 3c | `GET` | `{{base_url}}/api/profile/default` | **Bearer**；无默认时 **404** |
@@ -433,8 +477,8 @@ if (pm.response.code === 200) {
 
 ### 10.7 一键导入 Collection
 
-仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3** 请求需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
+仓库内提供 **`prototype/postman/zhili-prototype.postman_collection.json`**：Postman **Import** → 选该文件；导入后编辑 Collection **Variables**，将 **`base_url`** 改为实际端口（与 `server/.listen-port` 一致）。**Login** 成功后会自动写入 Collection 变量 **`token`**，`GET /api/user/me`、**`GET /api/user/recommend`（B3）**、**`GET /api/recommend`（B4）** 与 **B2** 请求的 Bearer 已绑定 **`{{token}}`**。**`POST /api/profile (B2)`** 在 **201** 时写入 **`profile_id`**，供 **`GET /api/profile/:id`**、**`PUT /api/profile/:id/default`** 使用。**B3/B4** 需已存在默认画像（可先跑 **POST /api/profile**）。若你在 Environment 里也定义了同名 **`token`** / **`profile_id`**，Postman 会优先用环境值——请保持为空或删除该环境键，以免覆盖刚登录得到的 token。
 
 ---
 
-**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** 与 **`lib/recommendCore.js`** 已具备；**B4 `GET /api/recommend`** 仍为规划；`develop.md` / `develop1.md` 已废止）。
+**文档版本**：与 develop2 **v3.0** 快照一致（B0+B1+**B2 `/api/profile*`** + **B3** **`GET /api/user/recommend`** + **B4** **`GET /api/recommend`**（Redis 可降级）；`develop.md` / `develop1.md` 已废止）。

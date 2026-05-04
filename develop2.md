@@ -1,8 +1,8 @@
 # 知礼 · 整合开发计划（develop2）
 
 **版本**：v3.0  
-**更新**：2026-05-04（**B2** `/api/profile*`；**B3** **`GET /api/user/recommend`** + **`lib/recommendCore.js`** + **`productsData.js`**；**§9.3.4** 与 [api.md](api.md) **§4.3、§4.2.1、§10** 同步；**§9.4** WBS 与落地快照）  
-**状态**：待评审（仓库 **B0 + B1 + B2 + B3（主路径）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
+**更新**：2026-05-04（**B4** **`GET /api/recommend`** + **`lib/recommendCache.js`** + 画像写后 **`DEL`**；**B3** **`recommendCore`**；[api.md](api.md) **§4.2.2**；**§9.5.0** 落地快照）  
+**状态**：待评审（仓库 **B0 + B1 + B2 + B3 + B4（主路径）+ 本机 Docker** 与篇首快照、[prototype-spec.md](prototype-spec.md) §3、[api.md](api.md) 一致）  
 
 本文档由原 **develop1**（MVP 规格 / SQL / 人天）与 **develop.md**（PRD 分项与 H5 阶段 A–E）整合重写，并与仓库 **`prototype/`**、[prototype-spec.md](prototype-spec.md)、[api.md](api.md)、[plan0.md](plan0.md)、[prd_v0.md](prd_v0.md) 对齐。**PRD 与 H5 分项长表**见本文 **附录 A**；原独立文件已删除，需追溯可查 Git 历史。
 
@@ -15,18 +15,18 @@
 | 域 | 状态 | 说明 |
 |----|------|------|
 | **H5 验证端** | **已具备** | `prototype/client`：`landing` → `tags` → `browse`；双列推荐；场合/预算/风格筛选 **500ms 防抖**；**下拉刷新**（触顶下拉 + `pull_refresh` 埋点）、**触底加载更多**；骨架屏、Toast、详情抽屉；**空状态 SVG 插画**；A/B、`zhili_vid` / `zhili_group` / `zhili_profile` |
-| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**（默认画像 + **`recommendCore`** 与 hot/personalized 同源，**Bearer**）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1、§4.3、§10**；B2 自测见本文 **§9.3.4** |
+| **API** | **已具备** | 验证流：`GET /api/hot`、`POST /api/personalized`、**`GET /api/related/:id`**、`POST /api/collect`、`GET /api/export/events.csv`、`GET /api/health`；**B1**：`POST /api/user/login`、`GET /api/user/me`；**B2**：**`/api/profile*`**（**Bearer**）；**B3**：**`GET /api/user/recommend`**；**B4**：**`GET /api/recommend`**（**`page`/`size`** + **Redis** 可降级，**Bearer**）；`/api/health` 含 `auth_configured`、`jwt_strong_secret`；契约见 [api.md](api.md) **§2、§4.2.1、§4.2.2、§4.3、§10**；B2 自测见本文 **§9.3.4** |
 | **算法与数据** | **已具备** | `scoring.js` 对齐 PRD 4.3/4.4；**`products.json` 共 200 条** |
 | **埋点落盘** | **已具备** | `prototype/server/data/events.jsonl`（无事件时目录或文件可能尚未生成，属正常） |
 | **小程序骨架** | **已具备** | `prototype/mp-weixin`：`profile` → `index` → `detail`；`app.json` 导航栏已用 PRD §5.2 主色占位 |
 | **阶段 A（H5）** | **已在 H5 落地** | 下拉刷新、触底分页、详情多图轮播、详情内横向类似推荐、空状态插画、商品池 **200**；小程序端仍待对齐（排期见附录 A §三） |
-| **MVP 后端（B0～）** | **B0+B1+B2+B3（部分）已具备** | **B0** 同前。**B1** 同前。**B2** 同前。**B3**：**`lib/recommendCore.js`**、**`productsData.js`**；**`GET /api/user/recommend`**（`routes/user.js`）衔接默认画像与 **`zhili_group`** 分流；**`index.js`** 中 **`/api/hot`、`/api/personalized`** 已改为调用 **`recommendCore`**。**B3 余量**（可选）：`related` 与画像的进一步抽取、集成测；见 **§9.4.0**。**B4+**：对外的 **`GET /api/recommend`**、Redis、`/api/favorite*`、联盟转链等仍待开发 |
+| **MVP 后端（B0～）** | **B0+B1+B2+B3+B4（主路径）已具备** | **B0** 同前。**B1** 同前。**B2** 同前。**B3**（**§9.4.0**）。**B4**：**`routes/recommend.js`**、**`lib/recommendCache.js`**、**`GET /api/recommend`**；**B2 写画像后** **`invalidateUserRecommendations`**；**B4 余量**：**B4.8～B4.9** 限流/观测、**B4.11** 压测报告，见 **§9.5.0**。**B5+**：`/api/product/:id`、`/api/favorite*`、联盟转链等仍待开发 |
 | **本机 Docker（B0 配套）** | **已具备** | `prototype/docker-compose.yml`（MySQL 8、Redis 7）；`npm run dev:db`（起容器 + 等健康 + `migrate`/`seed`）；`npm run docker:mysql-fresh`（改 root 密码后需重建卷时 `down -v`）；`server/.env.docker.example`；排错与 WSL/镜像加速见 [prototype/README.md](prototype/README.md)「本机 Docker」 |
 | **实验与决策门** | **外部依赖** | 部署、招募、样本量、CTR 报告是否完成：**以团队实际为准**；门槛仍按 §3 |
 
 **本地运行**：[prototype/README.md](prototype/README.md)（先 `server` 再 `client`；**若用 Docker MySQL/Redis**，先在该 README 完成 compose 与 `npm run dev:db`，保证 `server/.env` 中 **`DB_PASSWORD` 与 `MYSQL_ROOT_PASSWORD` 一致**；改密后旧卷需 `docker:mysql-fresh` 或手动 `ALTER USER`）。
 
-**下一增量（与 §9.1 顺序一致）**：（**B9** 商品写接口可部分并行）→ **B3 收尾**（§9.4.0 余量）→ **B4** 推荐网关 + Redis（**`GET /api/recommend`**）→ **B5**～**B8** → **B10** 联调硬化。（**B1、B2** 已完成；**B3 主链已落地**。）
+**下一增量（与 §9.1 顺序一致）**：（**B9** 商品写接口可部分并行）→ **B3/B4 收尾**（§9.4.0、§9.5.0 余量）→ **B5**～**B8** → **B10** 联调硬化。（**B1～B4 主链已落地**。）
 
 ---
 
@@ -35,7 +35,7 @@
 | 文档 | 用途 |
 |------|------|
 | **develop2.md（本文）** | 整合：验证门 + MVP 全量结构（范围/技术/库表/API/任务/验收/灰度/风险）+ `prototype` 勘误与映射；**附录 A** 为 PRD 分项与阶段 A–E |
-| [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **`GET /api/user/recommend`** **§4.2.1**；Postman **§10**（含 `token`、`profile_id`） |
+| [api.md](api.md) | `prototype/server` HTTP 接口说明；**B2** **§4.3**；**B3** **§4.2.1**；**B4** **`GET /api/recommend`** **§4.2.2**；Redis 约定 **§8.3**；Postman **§10** |
 | [prototype-spec.md](prototype-spec.md) | 当前验证端工程与埋点事实 |
 
 > 原 `develop.md`、`develop1.md` 已废止；SQL 与迁移以 **`prototype/server/migrations/*.sql`** 与本文 **§6** 为准，需追溯全文可查 Git 历史。
@@ -197,6 +197,8 @@
 
 **B3（推荐内核对接）** 把上述「取画像 + 调内核」在工程上 **落地为可复用模块/包/内部 HTTP**（不重写 `scoring.js`），目的、边界与子任务见 **§9.4**。
 
+**B4（推荐网关 + Redis）** 对外暴露 **`GET /api/recommend`** 并挂 **§8.3** 缓存与失效，目的与子任务见 **§9.5**。
+
 ---
 
 ## 8. 推荐算法、理由与缓存（develop1 §6）
@@ -208,6 +210,8 @@
 | **§6.3 Redis** | Key：`recommend:{user_id}:{profile_id}:{filter_hash}`，`filter_hash` = 稳定序列化 `occasion|budget|style|group`（如 SHA256 前 12 位）；**TTL 600s**；**画像变更** `DEL recommend:{user_id}:*`；故障 **降级**：与 develop1 一致走 **`hotRank` 或 `click_count` 排序**（验证端热门逻辑已存在） |
 
 **prototype**：未起 Docker 时 **无 Redis 进程**（`db.js` 降级）；`prototype/docker-compose.yml` 可提供 **Redis 7** 供本机/B4 预演。无 `click_count` 实时写回，MVP 接上 `event` 表后可批处理更新 `product.click_count`。
+
+**B4 落地时**：以上 key/TTL/失效/降级须与 **§9.5** 子任务 **B4.3～B4.7** 写进实现与单测，避免与 **§9.5.2** 边界冲突。
 
 ---
 
@@ -225,7 +229,7 @@
 | B1  | **微信登录**         | `POST /api/user/login`：`code`2Session → `openid` 落 `user`；JWT 或 session；与小程序 `app.login` 约定                                                                                                                                                              | B0           | **已实现（Express）**：`POST /api/user/login`、`GET /api/user/me`、`lib/jwt.js`、`middleware/requireAuth.js`；详见 [prototype/README.md](prototype/README.md)「B1」                  |
 | B2  | **画像 CRUD**      | 持久化 **`user_profile`**；REST **与 `POST /api/personalized` 画像段英文键一致**（§7.2、§9.3）；鉴权 **`requireAuth`**；默认画像与列表分页；详见 **§9.3**                                                                                                                                | B1           | **`routes/profile.js`**、**`lib/profileSchema.js`**、**`profile.test.mjs`**；**`002`+`migrate.js`**；契约见 [api.md](api.md)                                                                                                                               |
 | B3  | **推荐内核对接**       | **目的**：登录后推荐以 **B2 默认画像** 为输入，与 **`POST /api/personalized`**、**`scoring.js`** 同源、不漂移。**边界**：**不**实现对外 **`GET /api/recommend`**、**不上 Redis**（**B4**）。详见 **§9.4**                                                                                             | B0、B1、B2 | **主路径已实现**：**`lib/recommendCore.js`**、**`productsData.js`**、**`GET /api/user/recommend`**（[api.md](api.md) §4.2.1）；**`index.js`** 已切至 **`recommendCore`**。**余量**见 **§9.4.0**                                                                                                                                                         |
-| B4  | **推荐网关 + Redis** | `GET /api/recommend`：`page`/`size` → **offset/limit**（§7.2）；**§8.3** 缓存 key、TTL、画像变更失效、故障降级热门                                                                                                                                                            | B3、B0（Redis） | P90 目标可测                                                                                                                                                               |
+| B4  | **推荐网关 + Redis** | **目的**：对外 **`GET /api/recommend`**；**B3 内核**之上 **分页**、**Redis**、**失效**、**降级**；可选限流/观测见 **§9.5.0 余量**。**边界**：**不**改写 **`scoring.js`**。详见 **§9.5**                                                                                                                                                            | B3、B0、B1 | **主路径已实现**：**`routes/recommend.js`**、**`lib/recommendCache.js`**、**`recommend.test.mjs`**；**`profile.js`** 写后 **`DEL`**；契约 [api.md](api.md) **§4.2.2**。**余量**见 **§9.5.0**                                                                                                                                                               |
 | B5  | **商品读模型**        | `GET /api/product/:id`；可选代理 **`/api/related/:id`**；与小程序详情协议对齐                                                                                                                                                                                            | B0           | 详情 JSON 含 `images`、理由字段                                                                                                                                                |
 | B6  | **收藏（业务）**       | **`POST/DELETE /api/favorite`、`GET /api/favorite/list`**；表 `collection`；**禁止占用 `POST /api/collect`**（§7.1）                                                                                                                                               | B1           | 收藏幂等与列表分页                                                                                                                                                              |
 | B7  | **埋点入库（可选）**     | `POST /api/event` 写 `event`；或与验证端 **`POST /api/collect` 双写**、网关转发；匿名 `zhili_vid` 进 `extra`（§6.1）                                                                                                                                                         | B0、B1（可选）    | 与 CSV/分析脚本字段可对齐                                                                                                                                                        |
@@ -315,7 +319,7 @@
 #### 9.3.5 与 B3/B4 的交接面
 
 - **B3**：读默认画像（或用户当前选中的 `profile_id`）→ 组装与 **`POST /api/personalized`** 相同的 **profile 对象** → 不调微信、不改分数字段名；**细化任务与验收**见 **§9.4**。  
-- **B4**：对外 **`GET /api/recommend`**（`page`/`size`→`offset`/`limit`，§7.2）；缓存 key、TTL、画像变更失效、降级热门（§8.3）；**依赖 B3** 已明确「内核调用面」后再上 Redis，避免缓存层与打分实现双头维护。
+- **B4**：对外 **`GET /api/recommend`**（`page`/`size`→`offset`/`limit`，§7.2）；缓存 key、TTL、画像变更失效、降级热门（§8.3）；**依赖 B3** 已明确「内核调用面」后再上 Redis，避免缓存层与打分实现双头维护。**细化 WBS 与验收**见 **§9.5**。
 
 **与 develop1 表差异（本迭代可裁）**：develop1 `user` 含 `nickname` / `avatar_url`；当前 B0 表 **无** 此二列。B1 **最小闭环**可不落昵称头像；若产品要求「登录即写昵称」，则单加 **`002_user_profile_social.sql`** 或在 `user` 上 **`ALTER TABLE` 增列** 后再在登录或 **`getUserProfile`** 回调里更新（可划到 **B1.9 小迭代** 或 **B2 前**）。
 
@@ -373,12 +377,80 @@
 | **B3.3** | **分页与首屏补足** | **已实现**：**`runPersonalizedList`** / **`runHotList`** 与 **`index.js` 原逻辑**一致。**验收**：与 **`POST /api/personalized`** 同 Body 时列表一致（集成对比可做余量）。 | B3.2 |
 | **B3.4** | **`/api/related/:id` 与画像** | **未迁入模块**（仍在 **`index.js`**，仍用 **`enrich`** import）；逻辑与 B3 画像对象同形。**验收**：行为与改前一致；若后续迁入 **`recommendCore`**，补回归测。 | B3.1 |
 | **B3.5** | **单测与防回归** | **`scoring.test.mjs`** + **`recommendCore.test.mjs`**。**可选**：DB 集成测「登录 → 建画像 → `/api/user/recommend`」。**验收**：`npm test` 绿灯。 | B3.1～B3.3 |
-| **B3.6** | **文档** | **已更新**：[api.md](api.md) §2、§4.2.1、§9、§10；[prototype-spec.md](prototype-spec.md)；[prototype/README.md](prototype/README.md)；Postman；本文 **§9.4.0**、篇首、§9.1。**B4** 实现时引用 **§9.4.3** 形态。 | B3.5 |
+| **B3.6** | **文档** | **已更新**：[api.md](api.md) §2、§4.2.1、§9、§10；[prototype-spec.md](prototype-spec.md)；[prototype/README.md](prototype/README.md)；Postman；本文 **§9.4.0**、篇首、§9.1。**B4** 实现时内核调用沿用 **§9.4.3** 形态，缓存与对外路由按 **§9.5**。 | B3.5 |
 
 #### 9.4.5 与 B2、B4 的接口约定（摘要）
 
 - **自 B2**：默认画像 **`GET /api/profile/default`**；多画像时由客户端或后续网关传 **`profile_id`** 再 **`GET /api/profile/:id`**（均需 **Bearer**）。  
-- **交 B4**：B3 产出稳定的 **「内核函数签名」或「内部 HTTP 路径 + 固定 JSON」**；B4 在 **`GET /api/recommend`** 内只做 **鉴权 → 取 profile → 调内核 → 包一层缓存 key**（§8.3）。
+- **交 B4**：B3 产出稳定的 **「内核函数签名」或「内部 HTTP 路径 + 固定 JSON」**；B4 在 **`GET /api/recommend`** 内只做 **鉴权 → 取 profile → 调内核 → 包一层缓存 key**（§8.3）；**任务拆解**见 **§9.5**。
+
+### 9.5 B4 推荐网关与 Redis（目的、边界与 WBS）
+
+> **人天参照**：develop1 表「Redis 缓存集成」约 **1 人日** + 「推荐 API 开发」约 **2 人日**；在 **B3 已抽出 `recommendCore`** 的前提下，B4 侧重 **HTTP 聚合 + Redis + 失效钩子**，可合计 **约 1.5～3 人日**（视限流/观测深度）。
+
+#### 9.5.0 本仓库落地快照（与代码同步）
+
+| 项 | 状态 |
+|----|------|
+| **`GET /api/recommend`** | **已具备**：**`routes/recommend.js`**，**`index.js`** 挂载 **`/api/recommend`** |
+| **分页 `page`/`size`** | **已具备**：**`parsePageSize`**（`page`≥1，`size` 1～50） |
+| **Redis 缓存** | **已具备**：**`GET`/`SETEX` 600s**；key 见 **`recommendListCacheKey`**；**无 Redis 或异常**时跳过读写 |
+| **画像变更失效** | **已具备**：**`profile.js`** 成功 **POST/PUT/PUT default/DELETE** 后 **`invalidateUserRecommendations`**（**`KEYS recommend:{userId}:*` + `DEL`**，验证端可接受） |
+| **单测** | **`recommend.test.mjs`**：`parsePageSize`、`filterHash` |
+| **余量** | **B4.8** 限流、**B4.9** HIT/MISS 日志、**B4.11** 正式压测与 CI 阈值；生产可 **`SCAN`** 替代 **`KEYS`** |
+
+#### 9.5.1 目的（为什么要做 B4）
+
+| 维度        | 说明                                                                                                                                                                                                 |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **对外契约**  | 小程序 / 网关与 develop1 **§7.2** 对齐：主路径 **`GET /api/recommend?page=&size=`**（或团队冻结的等价 Query），由服务端内部 **`page/size` → `offset/limit`** 再调 **B3 内核**（`runHotList` / `runPersonalizedList`），避免客户端直接拼多套 URL。 |
+| **性能与成本** | 同一 **`user_id` + profile_id（或默认）+ shelf + group** 下重复请求占多数；**Redis** 缓存（§8.3）降低 **CPU（打分）** 与后续若接 **MySQL 商品读** 的压力，支撑 **P90 / 联调指标**（§11.2）。                                                      |
+| **正确性**   | **画像变更**（B2 **PUT/DELETE/PUT default**）后必须 **使该用户推荐缓存失效**（`DEL recommend:{user_id}:*`），否则用户看到旧推荐；**§9.5.4 B4.6** 与 B2 路由同事务或后置钩子写死。                                                                |
+| **韧性**    | Redis **不可用** 时 **降级直通内核**（与现 **`/api/hot`** 无缓存行为一致），**不得**因缓存层导致 **5xx** 或空数据硬断（§8.3「故障降级」）。                                                                                                     |
+
+#### 9.5.2 边界（B4 不包含）
+
+| 项 | 归属 |
+|----|------|
+| **改写** `computeScore` / `buildReasonLines` / 首屏补足规则 | **禁止**；属 **B3 / `scoring.js`** |
+| **收藏业务** **`/api/favorite*`** | **B6** |
+| **商品详情** **`GET /api/product/:id`** | **B5**（可与 B4 **并行开发**，但不应塞进 `GET /api/recommend` 响应里偷跑详情 SQL） |
+| **联盟转链** | **B8** |
+
+#### 9.5.3 与 B3 的分工（推荐调用链）
+
+```text
+客户端  GET /api/recommend?page&size&occasion&budget&style&zhili_group&profile_id?
+          → 鉴权（Bearer）→ 解析 user、选定 profile（默认或 profile_id）
+          → 计算 filter_hash（§8.3）→ Redis GET
+          → miss：调用 recommendCore.runHotList / runPersonalizedList（与 B3 同源）
+          → SETEX JSON、TTL=600
+          → 返回 ProductCard[]（与 [api.md](api.md) §7 一致；是否包一层 { list, page } 由契约冻结）
+```
+
+- **复用**：优先 **进程内 `import`** **`lib/recommendCore.js`**（与 **`GET /api/user/recommend`** 同路径），**避免** B4 再 HTTP 自调本机 `/api/personalized`（徒增延迟与序列化）；若未来 **网关独立进程**，再改为 **内网 HTTP**（develop2 **§9.4.3** 形态 C/D）。
+
+#### 9.5.4 子任务与验收（WBS）
+
+| 子项 | 任务 | 要点与验收 | 依赖 |
+|------|------|------------|------|
+| **B4.1** | **契约冻结** | 在 **[api.md](api.md)** 写明 **`GET /api/recommend`**：Query **`page`/`size`**、`occasion`/`budget`/`style`、**`zhili_group`/`group`**、可选 **`profile_id`**；响应 **`{ list, page, size, mode }`**（与 §4.2.2 一致）。 | B3、B1 |
+| **B4.2** | **分页映射** | **`offset=(page-1)*size`，`limit=size`**，`size` 默认 20、最大 50（**`routes/recommend.js`** **`parsePageSize`**）。**验收**：`page=1`、`size=n` 与 **`offset=0`、`limit=n`** 等价。 | B4.1 |
+| **B4.3** | **缓存 key 与 TTL** | **`filter_hash`**：将 **`occasion`、`budget`、`style`、`group`** 用竖线拼成稳定串再 **SHA256 前 12 位**（**`lib/recommendCache.filterHash`**）；key **`recommend:{user_id}:{profile_id}:{hash}`**；**TTL 600s**。 | B4.2、B0 Redis |
+| **B4.4** | **Redis 读写封装** | **`lib/recommendCache.js`**：`recommendListCacheKey`、`invalidateUserRecommendations`；**`getRedis()`** 为 null 则跳过缓存。 | B4.3 |
+| **B4.5** | **网关路由实现** | **`routes/recommend.js`** + **`index.js`** **`app.use('/api/recommend', …)`**；**`requireAuth`** → 取画像 → **`pickHotOrPersonalized`** → **`runHotList`/`runPersonalizedList`**。 | B4.4、B3 |
+| **B4.6** | **画像变更失效** | **`routes/profile.js`** 在 **POST /、PUT /:id、PUT /:id/default、DELETE /:id`** 成功 **`commit`** 后 **`invalidateUserRecommendations(getRedis(), req.userId)`**。 | B4.4、B2 |
+| **B4.7** | **Redis 故障降级** | **`GET`/`SET` 异常**时 catch 打日志并继续返回 **200** 列表。 | B4.5 |
+| **B4.8** | **限流（可选）** | 未做。 | B4.5 |
+| **B4.9** | **观测与日志** | 未做（可选 HIT/MISS）。 | B4.4 |
+| **B4.10** | **测试** | **`recommend.test.mjs`**：`parsePageSize`、`filterHash`；集成测可后续补。 | B4.5～B4.7 |
+| **B4.11** | **性能验收** | 压测 **P90** 可后续在 **B10** 关闭。 | B4.10 |
+| **B4.12** | **文档与 Postman** | **已更新**：api.md、prototype-spec、README、Postman、本文篇首与 **§9.5.0**。 | B4.11 |
+
+#### 9.5.5 与 B5、B10 的衔接（摘要）
+
+- **B5**：详情 **`GET /api/product/:id`** 可与 B4 **并行**；小程序首页调 **B4**、详情调 **B5**，字段名在 **api.md** 对齐。  
+- **B10**：联调清单中 **「推荐 P90」「Redis 降级」** 依赖 **B4.7、B4.11** 关闭项。
 
 | 模块       | 任务                                        | 人天     | 负责人 |
 | -------- | ----------------------------------------- | ------ | --- |
@@ -665,4 +737,4 @@ flowchart TB
 
 [prd_v0.md](prd_v0.md) · [plan0.md](plan0.md) · [prototype-spec.md](prototype-spec.md) · [api.md](api.md) · [prototype/README.md](prototype/README.md)
 
-**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4** 与 **§9.3.5**（及后续 **B4** 设计说明）。
+**维护约定**：**代码或数据有发布级变更时**，先更新本文篇首 **「当前开发状态」**、[prototype-spec.md](prototype-spec.md) 同步段与 **[api.md](api.md)**；PRD 分项与 H5 阶段排期同步更新 **附录 A**；MVP 后端任务同步 **§1 勘误、§7 映射、§9 人天表与 §9.1 后端 WBS**。**B2 契约、Postman、自测顺序**变更时同步 **§9.3.4** 与 [api.md](api.md) **§4.3、§10**。**B3 内核形态或画像→Body 映射**变更时同步 **§9.4**、**§9.3.5** 与 **§9.5.3**。**B4** 实现 **`GET /api/recommend`、缓存 key、失效策略** 变更时同步 **§9.5**、**§8.3** 与 [api.md](api.md) **§8**（规划段落地后改已实现表）。

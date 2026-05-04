@@ -147,6 +147,16 @@ Header：`Authorization: Bearer <token>`（与 B1 相同）。Body 字段与 **`
 
 **自测**：`login` → `POST /api/profile`（若尚无画像）→ **`GET /api/user/recommend?zhili_group=B&...`** → 改 **`zhili_group=A`** 对照热门列表。
 
+## B4 推荐网关（`page`/`size` + Redis 可降级）
+
+需 **Bearer**、**默认画像**，与 B3 共用 **`recommendCore`**；对外主路径为 **`page`/`size`** 分页（内部再映射 `offset`/`limit`）。详见仓库根目录 **[api.md](../api.md) §4.2.2**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| `GET` | `/api/recommend` | Query：顶筛 + **`zhili_group`/`group`** + **`page`≥1**、**`size`**（默认 20、最大 50）；可选 **`profile_id`**（缺省=默认画像）。**Redis** 缓存约 600s；无 Redis 或读写失败时仍返回 **200**。写画像（B2）后会 **失效** 该用户推荐缓存。 |
+
+**自测**：完成 B3 自测链路后 → **`GET /api/recommend?page=1&size=10&...`** 连发两次（起 Redis 时第二次更易命中缓存）→ **`PUT /api/profile/:id`** 后再 GET，列表应随新画像更新。
+
 **Windows PowerShell 自测登录（勿在双引号里用 `\\\"`，会传坏 JSON）**：
 
 ```powershell

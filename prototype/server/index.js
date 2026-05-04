@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { initDatabase, initRedis, getPool, getRedis, query } from './db.js';
 import userRouter from './routes/user.js';
 import profileRouter from './routes/profile.js';
+import recommendRouter from './routes/recommend.js';
 import { productsData } from './productsData.js';
 import {
   parsePaging,
@@ -60,6 +61,7 @@ app.use(express.json({ limit: '256kb' }));
 
 app.use('/api/user', userRouter);
 app.use('/api/profile', profileRouter);
+app.use('/api/recommend', recommendRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
