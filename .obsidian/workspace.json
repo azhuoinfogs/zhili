@@ -185,6 +185,8 @@
   },
   "active": "9477fb9291d28cc7",
   "lastOpenFiles": [
+    "prototype/mp-weixin/utils/favorite.js",
+    "prototype/mp-weixin/utils/auth.js",
     "prototype/server/middleware/rateLimit.js",
     "prd_v0.md",
     "develop3.md",
@@ -198,9 +200,7 @@
     "prototype/server/node_modules/multer/lib/make-middleware.js",
     "prototype/server/node_modules/multer/lib/counter.js",
     "prototype/server/node_modules/multer/storage",
-    "prototype/server/node_modules/multer/LICENSE",
     "prototype/server/node_modules/multer/README.md",
-    "prototype/server/node_modules/multer/lib",
     "prototype/server/data/uploads/1777890305021-bdkbcqdl.PNG",
     "prototype/server/data/uploads/1777889863026-h2xx4pcz.PNG",
     "prototype/admin/node_modules/@vue/shared/README.md",

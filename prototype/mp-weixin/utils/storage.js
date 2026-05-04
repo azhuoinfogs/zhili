@@ -3,6 +3,9 @@ const STORAGE_KEYS = {
   uid: 'zhili_vid',
   group: 'zhili_group',
   profile: 'zhili_profile',
+  token: 'zhili_token',
+  tokenExpire: 'zhili_token_expire',
+  userId: 'zhili_user_id',
 };
 
 function getOrCreateZhiliVid() {
@@ -40,10 +43,43 @@ function setProfile(obj) {
   wx.setStorageSync(STORAGE_KEYS.profile, JSON.stringify(obj));
 }
 
+function getToken() {
+  const expire = wx.getStorageSync(STORAGE_KEYS.tokenExpire);
+  if (!expire || Date.now() > expire) {
+    removeToken();
+    return null;
+  }
+  return wx.getStorageSync(STORAGE_KEYS.token);
+}
+
+function setToken(token, expiresInSeconds) {
+  wx.setStorageSync(STORAGE_KEYS.token, token);
+  wx.setStorageSync(STORAGE_KEYS.tokenExpire, Date.now() + expiresInSeconds * 1000);
+}
+
+function removeToken() {
+  wx.removeStorageSync(STORAGE_KEYS.token);
+  wx.removeStorageSync(STORAGE_KEYS.tokenExpire);
+  wx.removeStorageSync(STORAGE_KEYS.userId);
+}
+
+function getUserId() {
+  return wx.getStorageSync(STORAGE_KEYS.userId);
+}
+
+function setUserId(userId) {
+  wx.setStorageSync(STORAGE_KEYS.userId, userId);
+}
+
 module.exports = {
   STORAGE_KEYS,
   getOrCreateZhiliVid,
   getOrCreateGroup,
   getProfile,
   setProfile,
+  getToken,
+  setToken,
+  removeToken,
+  getUserId,
+  setUserId,
 };

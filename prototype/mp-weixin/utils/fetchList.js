@@ -1,5 +1,6 @@
 /** 与 client fetchRecommendations 请求形状一致 */
 const PAGE_SIZE = 20;
+const { getAuthHeader } = require('./auth.js');
 
 function shelfQueryFromFilters(f) {
   const q = [];
@@ -20,11 +21,14 @@ function fetchRecommendChunk(opts) {
     budget: listFilters.budget || '',
     style: listFilters.style || '',
   };
+  const headers = getAuthHeader();
+  
   return new Promise(function (resolve, reject) {
     if (group === 'A') {
       const qs = 'offset=' + offset + '&limit=' + PAGE_SIZE + shelfQueryFromFilters(listFilters);
       wx.request({
         url: base + '/api/hot?' + qs,
+        header: headers,
         success: function (res) {
           resolve(Array.isArray(res.data) ? res.data : []);
         },
@@ -39,7 +43,7 @@ function fetchRecommendChunk(opts) {
       wx.request({
         url: base + '/api/personalized',
         method: 'POST',
-        header: { 'content-type': 'application/json' },
+        header: headers,
         data: data,
         success: function (res) {
           resolve(Array.isArray(res.data) ? res.data : []);
