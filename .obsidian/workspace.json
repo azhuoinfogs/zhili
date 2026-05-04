@@ -185,8 +185,6 @@
   },
   "active": "9477fb9291d28cc7",
   "lastOpenFiles": [
-    "prototype/server/lib/validator.js",
-    "prototype/server/middleware/errorHandler.js",
     "prototype/mp-weixin/utils/favorite.js",
     "prototype/mp-weixin/utils/auth.js",
     "prototype/server/middleware/rateLimit.js",
@@ -200,6 +198,8 @@
     "prototype/server/node_modules/multer/lib/multer-error.js",
     "prototype/server/node_modules/multer/lib/file-appender.js",
     "prototype/server/node_modules/multer/lib/make-middleware.js",
+    "prototype/server/node_modules/multer/lib/counter.js",
+    "prototype/server/node_modules/multer/storage",
     "prototype/server/node_modules/multer/README.md",
     "prototype/server/data/uploads/1777890305021-bdkbcqdl.PNG",
     "prototype/server/data/uploads/1777889863026-h2xx4pcz.PNG",

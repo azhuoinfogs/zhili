@@ -30,8 +30,6 @@ import {
 } from './lib/recommendCore.js';
 import { wechatAuthConfigured } from './lib/wechat.js';
 import { jwtConfigured } from './lib/jwt.js';
-import { errorHandler, ERROR_CODES } from './middleware/errorHandler.js';
-import { validateProductId, sanitizeObject } from './lib/validator.js';
 import dotenv from 'dotenv';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -90,64 +88,46 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 app.use('/uploads', express.static(uploadsDir));
 
 app.get('/api/hot', async (req, res) => {
+  const q = req.query || {};
+  const { limit, offset } = parsePaging(q);
+  const shelf = shelfFromQuery(q);
   try {
-    const q = req.query || {};
-    const { limit, offset } = parsePaging(q);
-    const shelf = shelfFromQuery(q);
     const pool = await getListedProductPool(productsData);
-    const result = runHotList(pool, shelf, offset, limit);
-    res.json({ success: true, data: result });
+    res.json(runHotList(pool, shelf, offset, limit));
   } catch (e) {
     console.error('[知礼] /api/hot 失败:', e.message);
-    res.status(500).json({ error: ERROR_CODES.SERVER_ERROR, message: e.message });
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }
 });
 
 app.post('/api/personalized', async (req, res) => {
+  const body = req.body || {};
+  const { shelf, ...profile } = body;
+  const { limit, offset } = parsePagingFromBody(body);
+  const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
   try {
-    const body = req.body || {};
-    
-    if (typeof body !== 'object' || body === null) {
-      res.status(400).json({ error: ERROR_CODES.BAD_REQUEST, message: '请求体必须是 JSON 对象' });
-      return;
-    }
-    
-    const sanitizedBody = sanitizeObject(body);
-    const { shelf, ...profile } = sanitizedBody;
-    const { limit, offset } = parsePagingFromBody(sanitizedBody);
-    const shelfQ = shelf && typeof shelf === 'object' ? shelf : {};
-    
     const pool = await getListedProductPool(productsData);
-    const result = runPersonalizedList(pool, profile, shelfQ, offset, limit);
-    res.json({ success: true, data: result });
+    res.json(runPersonalizedList(pool, profile, shelfQ, offset, limit));
   } catch (e) {
     console.error('[知礼] /api/personalized 失败:', e.message);
-    res.status(500).json({ error: ERROR_CODES.SERVER_ERROR, message: e.message });
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }
 });
 
 app.get('/api/related/:id', async (req, res) => {
+  const id = req.params.id;
   try {
-    const id = req.params.id;
-    
-    if (!validateProductId(id)) {
-      res.status(400).json({ error: ERROR_CODES.BAD_REQUEST, message: '商品ID格式非法' });
-      return;
-    }
-    
     const resolved = await resolveProductById(id, productsData);
     if (!resolved) {
-      res.status(404).json({ error: ERROR_CODES.NOT_FOUND, message: '商品不存在' });
+      res.status(404).json([]);
       return;
     }
-    
     const profile = parseProfileFromQuery(req.query);
     const pool = await getListedProductPool(productsData);
-    const result = runRelatedList(pool, resolved.product, profile);
-    res.json({ success: true, data: result });
+    res.json(runRelatedList(pool, resolved.product, profile));
   } catch (e) {
     console.error('[知礼] /api/related 失败:', e.message);
-    res.status(500).json({ error: ERROR_CODES.SERVER_ERROR, message: e.message });
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
   }
 });
 
@@ -210,15 +190,12 @@ app.get('/api/export/events.csv', (req, res) => {
 app.get('/api/health', async (req, res) => {
   const status = {
     ok: true,
-    timestamp: new Date().toISOString(),
-    version: '0.2.0',
     products: productsData.length,
     database: 'not_connected',
     redis: 'not_connected',
     db_product_count: null,
     auth_configured: wechatAuthConfigured(),
     jwt_strong_secret: jwtConfigured(),
-    degraded_mode: false,
   };
 
   if (getPool()) {
@@ -228,39 +205,25 @@ app.get('/api/health', async (req, res) => {
       try {
         const rows = await query('SELECT COUNT(*) AS c FROM product');
         status.db_product_count = Number(rows[0]?.c ?? 0);
-      } catch (e) {
-        console.warn('[知礼] health: 无法查询商品数量:', e.message);
+      } catch {
         status.db_product_count = null;
       }
-    } catch (e) {
+    } catch {
       status.database = 'error';
-      console.warn('[知礼] health: 数据库连接失败:', e.message);
+      status.ok = false;
     }
-  } else {
-    status.degraded_mode = true;
-    console.warn('[知礼] health: 运行在降级模式（数据库未连接）');
   }
 
   if (getRedis()) {
     try {
       await getRedis().ping();
       status.redis = 'connected';
-    } catch (e) {
+    } catch {
       status.redis = 'error';
-      console.warn('[知礼] health: Redis 连接失败:', e.message);
     }
-  } else {
-    status.degraded_mode = true;
-    console.warn('[知礼] health: 运行在降级模式（Redis 未连接）');
   }
 
   res.json(status);
-});
-
-app.use(errorHandler);
-
-app.use((req, res) => {
-  res.status(404).json({ error: ERROR_CODES.NOT_FOUND, message: '接口不存在' });
 });
 
 async function tryListen(port) {
