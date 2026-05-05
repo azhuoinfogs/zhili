@@ -3,12 +3,30 @@
     "pages/landing/landing",
     "pages/tags/tags",
     "pages/browse/browse",
-    "pages/detail/detail"
+    "pages/detail/detail",
+    "pages/profile/profile"
   ],
   "window": {
     "navigationBarBackgroundColor": "#1c1917",
     "navigationBarTextStyle": "white",
     "navigationBarTitleText": "知礼",
     "backgroundColor": "#0c0a09"
-  }
+  },
+  "tabBar": {
+    "color": "#78716c",
+    "selectedColor": "#eab308",
+    "backgroundColor": "#1c1917",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/browse/browse",
+        "text": "礼遇"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的"
+      }
+    ]
+  },
+  "cloud": true
 }

@@ -13,46 +13,70 @@ Page({
     isCollected: false,
   },
   onLoad(q) {
+    console.log('[调试] detail onLoad - 接收参数:', q);
+    
     const id = q.id ? decodeURIComponent(q.id) : '';
+    console.log('[调试] detail onLoad - 商品ID:', id);
+    
     if (!id) {
+      console.error('[调试] detail onLoad - 缺少商品ID');
       this.setData({ product: null });
       return;
     }
-    const profile = getProfile() || {};
-    const base = app.globalData.apiBase;
-    const profileQ = encodeURIComponent(JSON.stringify(profile));
     
-    this._loadProduct(id, profileQ, base);
-    this._loadRelated(id, profileQ, base);
+    this._loadProduct(id);
+    this._loadRelated(id);
     this._loadCollectionStatus(id);
   },
   
-  _loadProduct(id, profileQ, base) {
-    wx.request({
-      url: `${base}/api/product/${encodeURIComponent(id)}?profile=${profileQ}`,
-      success: (res) => {
-        if (res.statusCode !== 200 || !res.data || res.data.error) {
-          this.setData({ product: null, imageUrls: [] });
-          return;
-        }
-        const p = res.data;
-        const imageUrls =
-          Array.isArray(p.images) && p.images.length ? p.images : p.image ? [p.image] : [];
+  async _loadProduct(productId) {
+    console.log('[调试] _loadProduct - 开始加载商品详情:', productId);
+    
+    try {
+      const result = await wx.cloud.callFunction({
+        name: 'product',
+        data: { action: 'detail', productId }
+      });
+      
+      console.log('[调试] _loadProduct - 云函数返回:', result);
+      
+      if (result.result?.success) {
+        const p = result.result.data;
+        const imageUrls = Array.isArray(p.images) && p.images.length ? p.images : p.image ? [p.image] : [];
         this.setData({ product: p, imageUrls, swiperIndex: 0 });
-      },
-      fail: () => this.setData({ product: null, imageUrls: [] }),
-    });
+        console.log('[调试] _loadProduct - 商品加载成功:', p.name);
+      } else {
+        console.error('[调试] _loadProduct - 获取商品失败:', result.result?.error);
+        this.setData({ product: null, imageUrls: [] });
+      }
+    } catch (err) {
+      console.error('[调试] _loadProduct - 云函数调用失败:', err);
+      this.setData({ product: null, imageUrls: [] });
+    }
   },
   
-  _loadRelated(id, profileQ, base) {
-    wx.request({
-      url: `${base}/api/related/${encodeURIComponent(id)}?profile=${profileQ}`,
-      success: (res) => {
-        const list = res.statusCode === 200 && Array.isArray(res.data) ? res.data : [];
-        this.setData({ related: list });
-      },
-      fail: () => this.setData({ related: [] }),
-    });
+  async _loadRelated(productId) {
+    console.log('[调试] _loadRelated - 开始加载相关商品:', productId);
+    
+    try {
+      const result = await wx.cloud.callFunction({
+        name: 'product',
+        data: { action: 'related', productId }
+      });
+      
+      console.log('[调试] _loadRelated - 云函数返回:', result);
+      
+      if (result.result?.success) {
+        this.setData({ related: result.result.data || [] });
+        console.log('[调试] _loadRelated - 相关商品加载成功，数量:', result.result.data?.length);
+      } else {
+        console.error('[调试] _loadRelated - 获取失败:', result.result?.error);
+        this.setData({ related: [] });
+      }
+    } catch (err) {
+      console.error('[调试] _loadRelated - 云函数调用失败:', err);
+      this.setData({ related: [] });
+    }
   },
   
   async _loadCollectionStatus(productId) {
@@ -77,10 +101,20 @@ Page({
     const { isCollected } = this.data;
     
     try {
-      const result = await toggleFavorite(p.id, isCollected);
+      const result = await toggleFavorite(p.id, isCollected, {
+        name: p.name || p.title,
+        price: p.price,
+        image: p.image || (p.images && p.images[0])
+      });
+      
       if (result.success) {
         this.setData({ isCollected: result.isCollected });
-        const message = result.isCollected ? '已收录至礼遇单' : '已取消收藏';
+        
+        let message = result.isCollected ? '已收录至礼遇单' : '已取消收藏';
+        if (result.message) {
+          message = result.message === '已收藏' ? '已在礼遇单中' : '未收藏该商品';
+        }
+        
         wx.showToast({ title: message, icon: 'none' });
         track(app, 'collect', { product_id: p.id, action: result.isCollected ? 'add' : 'remove' });
       }

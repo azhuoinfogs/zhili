@@ -1,0 +1,95 @@
+<view class="profile-page">
+  <view class="profile-bg"></view>
+  
+  <view class="profile-header glass">
+    <view class="avatar-wrap">
+      <view class="avatar">👤</view>
+    </view>
+    <view class="user-info">
+      <text class="username font-serif">{{ group === 'A' ? '典藏组贵宾' : '策展组雅士' }}</text>
+      <text class="user-group">{{ groupLabel }}</text>
+      <text class="user-id">ID: {{ userId.slice(-8) }}</text>
+    </view>
+  </view>
+
+  <view class="sub-nav glass">
+    <view class="sub-nav-item {{ activeTab === 'favorites' ? 'active' : '' }}" bindtap="switchTab" data-tab="favorites">
+      <text class="sub-nav-icon">♥</text>
+      <text class="sub-nav-text">我的收藏</text>
+      <text wx:if="{{ favorites.length > 0 }}" class="sub-nav-badge">{{ favorites.length }}</text>
+    </view>
+    <view class="sub-nav-item {{ activeTab === 'portrait' ? 'active' : '' }}" bindtap="switchTab" data-tab="portrait">
+      <text class="sub-nav-icon">👤</text>
+      <text class="sub-nav-text">我的画像</text>
+    </view>
+  </view>
+
+  <view wx:if="{{ activeTab === 'favorites' }}" class="section glass">
+    <view class="section-header">
+      <text class="font-serif">我的礼遇单</text>
+      <text class="link-ghost" bindtap="fetchFavorites">刷新</text>
+    </view>
+    <view wx:if="{{ favoritesLoading }}" class="loading-text">加载中…</view>
+    <view wx:elif="{{ favorites.length === 0 }}" class="empty-state">
+      <text class="empty-icon">📦</text>
+      <text class="empty-text">暂无收藏，去逛逛吧</text>
+      <view class="cta-outline" bindtap="goToBrowse">去浏览</view>
+    </view>
+    <view wx:else class="favorites-list">
+      <view wx:for="{{ favorites }}" wx:key="product_id" class="favorite-row glass" bindtap="openDetail" data-id="{{ product_id }}">
+        <image src="{{ image }}" class="favorite-thumb" mode="aspectFill" />
+        <view class="favorite-info">
+          <text class="favorite-name">{{ name }}</text>
+          <text class="favorite-price">¥{{ price }}</text>
+        </view>
+        <view class="favorite-remove" bindtap="removeFavoriteItem" data-product-id="{{ product_id }}" catchtap="true">移除</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:else class="section glass">
+    <view class="section-header">
+      <text class="font-serif">我的画像</text>
+      <text class="link-ghost" bindtap="goToTags">修改偏好</text>
+    </view>
+    <view wx:if="{{ !profile }}" class="empty-state">
+      <text class="empty-icon">🎨</text>
+      <text class="empty-text">尚未设置偏好</text>
+      <view class="cta-outline" bindtap="goToTags">去设置</view>
+    </view>
+    <view wx:else class="portrait-content">
+      <view class="portrait-row">
+        <text class="portrait-label">用户分组</text>
+        <text class="portrait-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">收礼关系</text>
+        <text class="portrait-value">{{ relationLabels[profile.relation] || '未设置' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">年龄段</text>
+        <text class="portrait-value">{{ profile.ageBand || '未设置' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">性别</text>
+        <text class="portrait-value">{{ profile.gender === 'female' ? '女' : profile.gender === 'male' ? '男' : '未知/通用' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">送礼场合</text>
+        <text class="portrait-value">{{ occasionLabels[profile.occasion] || '未设置' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">预算范围</text>
+        <text class="portrait-value">{{ budgetLabels[profile.budget] || '未设置' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">礼物风格</text>
+        <text class="portrait-value">{{ styleLabels[profile.style] || '未设置' }}</text>
+      </view>
+      <view class="portrait-row">
+        <text class="portrait-label">兴趣爱好</text>
+        <text class="portrait-value">{{ getInterestLabels(profile.interests) }}</text>
+      </view>
+    </view>
+  </view>
+</view>

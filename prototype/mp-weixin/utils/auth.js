@@ -1,89 +1,86 @@
-/** 微信登录工具函数 */
+const { getOrCreateZhiliVid } = require('./storage.js');
 
-const { getToken, setToken, setUserId, getUserId, removeToken, getOrCreateZhiliVid } = require('./storage.js');
+const TOKEN_KEY = 'zhili_token';
+const USER_KEY = 'zhili_user';
 
-const app = getApp();
-
-/**
- * 执行微信登录
- * @returns {Promise<{success: boolean, token?: string, userId?: number}>}
- */
-function wechatLogin() {
-  return new Promise(function (resolve, reject) {
-    wx.login({
-      success: function (loginRes) {
-        if (!loginRes.code) {
-          reject(new Error('获取登录码失败'));
-          return;
-        }
-        
-        const anonId = getOrCreateZhiliVid();
-        
-        wx.request({
-          url: app.globalData.apiBase + '/api/user/login',
-          method: 'POST',
-          header: { 'content-type': 'application/json' },
-          data: {
-            code: loginRes.code,
-            anon_id: anonId,
-          },
-          success: function (res) {
-            if (res.statusCode === 200 && res.data.token) {
-              setToken(res.data.token, res.data.expires_in);
-              setUserId(res.data.user.id);
-              resolve({
-                success: true,
-                token: res.data.token,
-                userId: res.data.user.id,
-              });
-            } else {
-              reject(new Error(res.data?.message || '登录失败'));
-            }
-          },
-          fail: function (err) {
-            reject(new Error('网络请求失败: ' + err.errMsg));
-          },
-        });
-      },
-      fail: function (err) {
-        reject(new Error('微信登录失败: ' + err.errMsg));
-      },
-    });
-  });
+function getToken() {
+  try {
+    return wx.getStorageSync(TOKEN_KEY);
+  } catch (e) {
+    return null;
+  }
 }
 
-/**
- * 检查是否已登录（token 是否有效）
- * @returns {boolean}
- */
+function setToken(token) {
+  try {
+    wx.setStorageSync(TOKEN_KEY, token);
+  } catch (e) {
+    console.warn('setToken error:', e);
+  }
+}
+
+function getUser() {
+  try {
+    const data = wx.getStorageSync(USER_KEY);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setUser(user) {
+  try {
+    wx.setStorageSync(USER_KEY, JSON.stringify(user));
+  } catch (e) {
+    console.warn('setUser error:', e);
+  }
+}
+
 function isLoggedIn() {
   return !!getToken();
 }
 
-/**
- * 获取请求头（包含 Authorization）
- * @returns {Record<string, string>}
- */
-function getAuthHeader() {
-  const token = getToken();
-  const headers = { 'content-type': 'application/json' };
-  if (token) {
-    headers.Authorization = 'Bearer ' + token;
-  }
-  return headers;
-}
-
-/**
- * 登出
- */
-function logout() {
-  removeToken();
+async function wechatLogin() {
+  return new Promise((resolve, reject) => {
+    wx.login({
+      success: async (res) => {
+        if (!res.code) {
+          reject(new Error('获取登录码失败'));
+          return;
+        }
+        
+        try {
+          const anon_id = getOrCreateZhiliVid();
+          const result = await wx.cloud.callFunction({
+            name: 'login',
+            data: {
+              code: res.code,
+              anon_id
+            }
+          });
+          
+          if (result.result && result.result.success) {
+            const { data } = result.result;
+            setToken(data.token);
+            setUser(data);
+            resolve(data);
+          } else {
+            reject(new Error(result.result?.error || '登录失败'));
+          }
+        } catch (err) {
+          reject(err);
+        }
+      },
+      fail: (err) => reject(err)
+    });
+  });
 }
 
 module.exports = {
-  wechatLogin,
+  getToken,
+  setToken,
+  getUser,
+  setUser,
   isLoggedIn,
-  getAuthHeader,
-  getUserId,
-  logout,
+  wechatLogin
 };

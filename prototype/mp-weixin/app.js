@@ -1,6 +1,13 @@
 App({
+  onLaunch() {
+    if (wx.cloud) {
+      wx.cloud.init({
+        env: 'cloud1-d5g4riq00201609a1'
+      });
+      console.log('云开发初始化成功');
+    }
+  },
   globalData: {
-    // 开发时在开发者工具「详情-本地设置」勾选不校验合法域名，或替换为你的 HTTPS API
     apiBase: 'http://127.0.0.1:3000'
   }
 });

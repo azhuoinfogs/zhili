@@ -112,6 +112,6 @@ Page({
     const payload = profilePayloadFromForm(this.data);
     track(app, 'form_submit', { ...payload });
     setProfile(payload);
-    wx.redirectTo({ url: '/pages/browse/browse' });
+    wx.switchTab({ url: '/pages/browse/browse' });
   },
 });

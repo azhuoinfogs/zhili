@@ -1,60 +1,163 @@
-/** 与 client fetchRecommendations 请求形状一致 */
-const PAGE_SIZE = 20;
-const { getAuthHeader } = require('./auth.js');
+const { getProfile, getOrCreateGroup } = require('./storage.js');
 
-function shelfQueryFromFilters(f) {
-  const q = [];
-  if (f.occasion) q.push('occasion=' + encodeURIComponent(f.occasion));
-  if (f.budget) q.push('budget=' + encodeURIComponent(f.budget));
-  if (f.style) q.push('style=' + encodeURIComponent(f.style));
-  return q.length ? '&' + q.join('&') : '';
+const PAGE_SIZE = 10;
+
+async function fetchRecommendChunk({ base, group, profile, listFilters, offset }) {
+  try {
+    const result = await wx.cloud.callFunction({
+      name: 'product',
+      data: { action: 'list' }
+    });
+    
+    if (result.result && result.result.success) {
+      let products = result.result.data;
+      
+      if (group === 'A') {
+        products = [...products].sort((a, b) => b.sales - a.sales);
+      }
+      
+      const { occasion, budget, style } = listFilters;
+      
+      if (occasion) {
+        products = products.filter(p => p.tags?.includes(occasion));
+      }
+      if (budget) {
+        const budgetMap = {
+          'lt100': p => p.price < 100,
+          '100-300': p => p.price >= 100 && p.price < 300,
+          '300-500': p => p.price >= 300 && p.price < 500,
+          '500-1000': p => p.price >= 500 && p.price < 1000,
+          '1000+': p => p.price >= 1000
+        };
+        if (budgetMap[budget]) {
+          products = products.filter(budgetMap[budget]);
+        }
+      }
+      if (style) {
+        products = products.filter(p => p.tags?.includes(style));
+      }
+      
+      const chunk = products.slice(offset, offset + PAGE_SIZE).map(p => ({
+        id: p.productId,
+        productId: p.productId,
+        name: p.name || p.title || '未知商品',
+        title: p.title || p.name || '未知商品',
+        description: p.description,
+        price: p.price,
+        image: p.images?.[0] || p.image || 'https://picsum.photos/seed/default/200/200',
+        tags: p.tags
+      }));
+      
+      return chunk;
+    } else {
+      throw new Error(result.result?.error || '获取推荐失败');
+    }
+  } catch (err) {
+    console.error('fetchRecommendChunk error:', err);
+    throw err;
+  }
 }
 
-function fetchRecommendChunk(opts) {
-  const base = opts.base;
-  const group = opts.group;
-  const profile = opts.profile;
-  const listFilters = opts.listFilters;
-  const offset = opts.offset;
-  const shelf = {
-    occasion: listFilters.occasion || '',
-    budget: listFilters.budget || '',
-    style: listFilters.style || '',
-  };
-  const headers = getAuthHeader();
+async function fetchRecommendList(base, profile = null) {
+  const userProfile = profile || getProfile();
+  const group = getOrCreateGroup();
   
-  return new Promise(function (resolve, reject) {
-    if (group === 'A') {
-      const qs = 'offset=' + offset + '&limit=' + PAGE_SIZE + shelfQueryFromFilters(listFilters);
-      wx.request({
-        url: base + '/api/hot?' + qs,
-        header: headers,
-        success: function (res) {
-          resolve(Array.isArray(res.data) ? res.data : []);
-        },
-        fail: reject,
-      });
+  try {
+    const result = await wx.cloud.callFunction({
+      name: 'product',
+      data: { action: 'list' }
+    });
+    
+    if (result.result && result.result.success) {
+      let products = result.result.data;
+      
+      if (group === 'A') {
+        products = [...products].sort((a, b) => b.sales - a.sales).slice(0, 20);
+      }
+      
+      return {
+        success: true,
+        list: products.map(p => ({
+          id: p.productId,
+          productId: p.productId,
+          name: p.name || p.title || '未知商品',
+          title: p.title || p.name || '未知商品',
+          description: p.description,
+          price: p.price,
+          image: p.images?.[0] || p.image || 'https://picsum.photos/seed/default/200/200',
+          tags: p.tags
+        }))
+      };
     } else {
-      const data = Object.assign({}, profile, {
-        shelf: shelf,
-        offset: offset,
-        limit: PAGE_SIZE,
-      });
-      wx.request({
-        url: base + '/api/personalized',
-        method: 'POST',
-        header: headers,
-        data: data,
-        success: function (res) {
-          resolve(Array.isArray(res.data) ? res.data : []);
-        },
-        fail: reject,
-      });
+      throw new Error(result.result?.error || '获取推荐失败');
     }
-  });
+  } catch (err) {
+    console.error('fetchRecommendList error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function fetchProductDetail(base, productId, profile = null) {
+  try {
+    const result = await wx.cloud.callFunction({
+      name: 'product',
+      data: { action: 'detail', productId }
+    });
+    
+    if (result.result && result.result.success) {
+      const p = result.result.data;
+      return {
+        success: true,
+        data: {
+          id: p.productId,
+          productId: p.productId,
+          name: p.name,
+          description: p.description,
+          price: p.price,
+          images: p.images,
+          tags: p.tags
+        }
+      };
+    } else {
+      throw new Error(result.result?.error || '获取商品详情失败');
+    }
+  } catch (err) {
+    console.error('fetchProductDetail error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+async function fetchRelatedProducts(base, productId, profile = null) {
+  try {
+    const result = await wx.cloud.callFunction({
+      name: 'product',
+      data: { action: 'related', productId }
+    });
+    
+    if (result.result && result.result.success) {
+      return {
+        success: true,
+        data: result.result.data.map(p => ({
+          id: p.productId,
+          productId: p.productId,
+          name: p.name,
+          price: p.price,
+          image: p.images?.[0] || p.image
+        }))
+      };
+    } else {
+      throw new Error(result.result?.error || '获取相关推荐失败');
+    }
+  } catch (err) {
+    console.error('fetchRelatedProducts error:', err);
+    return { success: false, error: err.message };
+  }
 }
 
 module.exports = {
-  fetchRecommendChunk: fetchRecommendChunk,
-  PAGE_SIZE: PAGE_SIZE,
+  PAGE_SIZE,
+  fetchRecommendChunk,
+  fetchRecommendList,
+  fetchProductDetail,
+  fetchRelatedProducts
 };

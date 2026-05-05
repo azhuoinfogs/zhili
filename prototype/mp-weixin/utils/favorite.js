@@ -1,107 +1,125 @@
-/** 收藏持久化工具函数 */
+const { getToken } = require('./auth.js');
 
-const { getAuthHeader } = require('./auth.js');
+const FAVORITE_KEY = 'zhili_favorites';
 
-const app = getApp();
-
-/**
- * 获取用户收藏列表
- * @returns {Promise<{list: Array, total: number}>}
- */
-function getFavoriteList() {
-  return new Promise(function (resolve, reject) {
-    wx.request({
-      url: app.globalData.apiBase + '/api/favorite/list',
-      header: getAuthHeader(),
-      success: function (res) {
-        if (res.statusCode === 200) {
-          resolve(res.data);
-        } else {
-          reject(new Error(res.data?.message || '获取收藏列表失败'));
-        }
-      },
-      fail: function (err) {
-        reject(new Error('网络请求失败: ' + err.errMsg));
-      },
-    });
-  });
-}
-
-/**
- * 添加收藏
- * @param {string} productId 商品ID
- * @returns {Promise<{success: boolean, already?: boolean}>}
- */
-function addFavorite(productId) {
-  return new Promise(function (resolve, reject) {
-    wx.request({
-      url: app.globalData.apiBase + '/api/favorite',
-      method: 'POST',
-      header: getAuthHeader(),
-      data: { productId: productId },
-      success: function (res) {
-        if (res.statusCode === 200 || res.statusCode === 201) {
-          resolve({
-            success: true,
-            already: !!res.data.already,
-          });
-        } else {
-          reject(new Error(res.data?.message || '收藏失败'));
-        }
-      },
-      fail: function (err) {
-        reject(new Error('网络请求失败: ' + err.errMsg));
-      },
-    });
-  });
-}
-
-/**
- * 取消收藏
- * @param {string} productId 商品ID
- * @returns {Promise<{success: boolean}>}
- */
-function removeFavorite(productId) {
-  return new Promise(function (resolve, reject) {
-    wx.request({
-      url: app.globalData.apiBase + '/api/favorite/' + encodeURIComponent(productId),
-      method: 'DELETE',
-      header: getAuthHeader(),
-      success: function (res) {
-        if (res.statusCode === 204) {
-          resolve({ success: true });
-        } else {
-          reject(new Error(res.data?.message || '取消收藏失败'));
-        }
-      },
-      fail: function (err) {
-        reject(new Error('网络请求失败: ' + err.errMsg));
-      },
-    });
-  });
-}
-
-/**
- * 切换收藏状态
- * @param {string} productId 商品ID
- * @param {boolean} isCollected 当前是否已收藏
- * @returns {Promise<{success: boolean, isCollected: boolean}>}
- */
-function toggleFavorite(productId, isCollected) {
-  if (isCollected) {
-    return removeFavorite(productId).then(function () {
-      return { success: true, isCollected: false };
-    });
-  } else {
-    return addFavorite(productId).then(function () {
-      return { success: true, isCollected: true };
-    });
+function getLocalFavorites() {
+  try {
+    const data = wx.getStorageSync(FAVORITE_KEY);
+    return data ? JSON.parse(data) : { list: [], updatedAt: 0 };
+  } catch (e) {
+    return { list: [], updatedAt: 0 };
   }
 }
 
+function setLocalFavorites(list) {
+  try {
+    wx.setStorageSync(FAVORITE_KEY, JSON.stringify({
+      list,
+      updatedAt: Date.now()
+    }));
+  } catch (e) {
+    console.warn('setLocalFavorites error:', e);
+  }
+}
+
+async function toggleFavorite(productId, isCollected, productInfo = {}) {
+  if (!getToken()) {
+    const local = getLocalFavorites();
+    let list = [...local.list];
+    const index = list.findIndex(item => item.product_id === productId);
+    
+    if (isCollected) {
+      if (index >= 0) {
+        list.splice(index, 1);
+      }
+    } else {
+      if (index < 0) {
+        list.push({
+          product_id: productId,
+          ...productInfo,
+          addedAt: Date.now()
+        });
+      }
+    }
+    
+    setLocalFavorites(list);
+    return { success: true, isCollected: !isCollected };
+  }
+  
+  try {
+    const action = isCollected ? 'remove' : 'add';
+    const result = await wx.cloud.callFunction({
+      name: 'favorite',
+      data: {
+        action,
+        productId,
+        productInfo: !isCollected ? productInfo : undefined
+      }
+    });
+    
+    if (result.result && result.result.success) {
+      const local = getLocalFavorites();
+      let list = [...local.list];
+      const index = list.findIndex(item => item.product_id === productId);
+      
+      if (isCollected) {
+        if (index >= 0) list.splice(index, 1);
+      } else {
+        if (index < 0) list.push({ product_id: productId, ...productInfo });
+      }
+      setLocalFavorites(list);
+      
+      return { success: true, isCollected: result.result.isCollected };
+    } else {
+      const errorMsg = result.result?.error || '操作失败';
+      // 如果是"已收藏"或"未收藏"，视为成功但状态不变
+      if (errorMsg === '已收藏' || errorMsg === '未收藏') {
+        return { success: true, isCollected: !isCollected, message: errorMsg };
+      }
+      throw new Error(errorMsg);
+    }
+  } catch (err) {
+    console.error('toggleFavorite error:', err);
+    throw err;
+  }
+}
+
+async function getFavoriteList() {
+  if (!getToken()) {
+    return getLocalFavorites();
+  }
+  
+  try {
+    const result = await wx.cloud.callFunction({
+      name: 'favorite',
+      data: { action: 'list' }
+    });
+    
+    if (result.result && result.result.success) {
+      const cloudList = result.result.data.map(item => ({
+        product_id: item.productId || item.product_id,
+        name: item.name || item.productName || '未知商品',
+        price: item.price || item.productPrice || 0,
+        image: item.image || item.productImage || 'https://picsum.photos/seed/default/200/200',
+        addedAt: item.created_at?.getTime() || Date.now()
+      }));
+      setLocalFavorites(cloudList);
+      return { list: cloudList };
+    } else {
+      return getLocalFavorites();
+    }
+  } catch (err) {
+    console.warn('getFavoriteList error:', err);
+    return getLocalFavorites();
+  }
+}
+
+async function removeFavorite(productId) {
+  return toggleFavorite(productId, true);
+}
+
 module.exports = {
-  getFavoriteList,
-  addFavorite,
-  removeFavorite,
   toggleFavorite,
+  getFavoriteList,
+  removeFavorite
 };

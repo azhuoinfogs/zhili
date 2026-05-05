@@ -170,7 +170,19 @@ Page({
   openDetail(e) {
     const id = e.currentTarget.dataset.id;
     const pos = e.currentTarget.dataset.pos;
+    console.log('[调试] openDetail - 商品ID:', id, '位置:', pos);
+    
+    if (!id) {
+      console.error('[调试] openDetail - 缺少商品ID');
+      return;
+    }
+    
     track(app, 'click', { product_id: id, position: Number(pos) });
-    wx.navigateTo({ url: `/pages/detail/detail?id=${encodeURIComponent(id)}` });
+    
+    wx.navigateTo({
+      url: `/pages/detail/detail?id=${encodeURIComponent(id)}`,
+      success: () => console.log('[调试] 跳转详情页成功'),
+      fail: (err) => console.error('[调试] 跳转详情页失败:', err)
+    });
   },
 });

@@ -19,6 +19,7 @@ function logout() {
       <strong>知礼运营后台</strong>
       <nav>
         <router-link to="/products">商品</router-link>
+        <router-link to="/users">用户管理</router-link>
         <router-link to="/import">联盟导入</router-link>
         <router-link to="/dashboard">数据看板</router-link>
         <button type="button" class="link" @click="logout">退出</button>

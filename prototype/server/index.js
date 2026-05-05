@@ -15,6 +15,7 @@ import adminProductRouter from './routes/adminProduct.js';
 import adminAuthRouter from './routes/adminAuth.js';
 import adminStatsRouter from './routes/adminStats.js';
 import adminUploadRouter from './routes/adminUpload.js';
+import adminUserRouter from './routes/adminUser.js';
 import productImportRouter from './routes/productImport.js';
 import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
@@ -74,6 +75,7 @@ app.use(express.json({ limit: '256kb' }));
 app.use('/api/admin/auth', adminAuthRouter);
 app.use('/api/admin/stats', adminStatsRouter);
 app.use('/api/admin/upload', adminUploadRouter);
+app.use('/api/admin/users', adminUserRouter);
 
 app.use('/api/user', userRouter);
 app.use('/api/profile', profileRouter);
