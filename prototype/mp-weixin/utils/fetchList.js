@@ -140,9 +140,10 @@ async function fetchRelatedProducts(base, productId, profile = null) {
         data: result.result.data.map(p => ({
           id: p.productId,
           productId: p.productId,
-          name: p.name,
+          name: p.name || p.title || '未知商品',
+          title: p.title || p.name || '未知商品',
           price: p.price,
-          image: p.images?.[0] || p.image
+          image: p.images?.[0] || p.image || 'https://picsum.photos/seed/default/200/200'
         }))
       };
     } else {

@@ -1,6 +1,7 @@
 const { getProfile } = require('../../utils/storage.js');
 const { track } = require('../../utils/track.js');
 const { toggleFavorite, getFavoriteList } = require('../../utils/favorite.js');
+const { fetchRelatedProducts } = require('../../utils/fetchList.js');
 
 const app = getApp();
 
@@ -59,22 +60,19 @@ Page({
     console.log('[调试] _loadRelated - 开始加载相关商品:', productId);
     
     try {
-      const result = await wx.cloud.callFunction({
-        name: 'product',
-        data: { action: 'related', productId }
-      });
+      const result = await fetchRelatedProducts(null, productId);
       
-      console.log('[调试] _loadRelated - 云函数返回:', result);
+      console.log('[调试] _loadRelated - 返回:', result);
       
-      if (result.result?.success) {
-        this.setData({ related: result.result.data || [] });
-        console.log('[调试] _loadRelated - 相关商品加载成功，数量:', result.result.data?.length);
+      if (result.success) {
+        this.setData({ related: result.data || [] });
+        console.log('[调试] _loadRelated - 相关商品加载成功，数量:', result.data?.length);
       } else {
-        console.error('[调试] _loadRelated - 获取失败:', result.result?.error);
+        console.error('[调试] _loadRelated - 获取失败:', result.error);
         this.setData({ related: [] });
       }
     } catch (err) {
-      console.error('[调试] _loadRelated - 云函数调用失败:', err);
+      console.error('[调试] _loadRelated - 调用失败:', err);
       this.setData({ related: [] });
     }
   },
