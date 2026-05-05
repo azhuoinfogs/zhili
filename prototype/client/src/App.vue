@@ -44,6 +44,12 @@ const toastMsg = ref('');
 let toastTimer = null;
 let io = null;
 
+const favorites = ref([]);
+const favoritesLoading = ref(false);
+const showProfile = ref(false);
+const activeTab = ref('home'); // home, browse, profile
+const profileSubTab = ref('favorites'); // favorites, portrait
+
 function showToast(msg) {
   toastMsg.value = msg;
   if (toastTimer) clearTimeout(toastTimer);
@@ -214,6 +220,32 @@ function goExplore() {
   phase.value = 'tags';
 }
 
+function switchTab(tab) {
+  activeTab.value = tab;
+  if (tab === 'profile') {
+    track('view_profile');
+    fetchFavorites();
+  } else if (tab === 'browse') {
+    if (phase.value === 'landing') {
+      phase.value = 'tags';
+    } else if (phase.value === 'tags') {
+      goBrowse();
+    }
+  }
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diff = now - date;
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (days === 0) return '今天';
+  if (days === 1) return '昨天';
+  if (days < 7) return `${days}天前`;
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 function backToHome() {
   phase.value = 'landing';
 }
@@ -359,9 +391,55 @@ function closeDetail() {
   modalSlideIndex.value = 0;
 }
 
-function onCollect(p) {
+async function onCollect(p) {
   track('collect', { product_id: p.id });
-  showToast('已收录至礼遇单');
+  try {
+    const res = await fetch('/api/favorite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_id: p.id, user_id: userId.value })
+    });
+    if (res.ok) {
+      showToast('已收藏');
+      await fetchFavorites();
+    } else {
+      showToast('收藏失败');
+    }
+  } catch {
+    showToast('收藏失败');
+  }
+}
+
+async function fetchFavorites() {
+  favoritesLoading.value = true;
+  try {
+    const res = await fetch(`/api/favorite/list?user_id=${userId.value}`);
+    if (res.ok) {
+      const data = await res.json();
+      favorites.value = data.list || [];
+    }
+  } catch {
+    favorites.value = [];
+  } finally {
+    favoritesLoading.value = false;
+  }
+}
+
+async function removeFavorite(productId) {
+  try {
+    const res = await fetch(`/api/favorite/${productId}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId.value })
+    });
+    if (res.ok) {
+      const idx = favorites.value.findIndex(f => f.product_id === productId);
+      if (idx >= 0) favorites.value.splice(idx, 1);
+      showToast('已取消收藏');
+    }
+  } catch {
+    showToast('取消失败');
+  }
 }
 
 function onPurchase(p) {
@@ -385,8 +463,10 @@ onUnmounted(() => {
   <div class="app">
     <div v-if="toastMsg" class="toast" role="status" aria-live="polite">{{ toastMsg }}</div>
 
-    <!-- 1. 奢侈品电商风首页 -->
-    <section v-if="phase === 'landing'" class="landing">
+    <!-- 主内容区 -->
+    <main v-if="activeTab !== 'profile'">
+      <!-- 1. 奢侈品电商风首页 -->
+      <section v-if="phase === 'landing'" class="landing">
       <div class="landing-bg" aria-hidden="true" />
       <div class="landing-top">
         <span class="pill-ab">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</span>
@@ -666,6 +746,224 @@ onUnmounted(() => {
         <p class="modal-legal">正式版将提示离开礼遇馆前往第三方完成交易</p>
       </div>
     </div>
+
+    <!-- 收藏列表弹窗 -->
+    <div v-if="favorites.length > 0" class="modal-mask" role="presentation" @click.self="favorites = []">
+      <div class="modal glass modal-favorites" role="dialog" aria-labelledby="favorites-title">
+        <div class="modal-handle" aria-hidden="true" />
+        <button type="button" class="modal-close" aria-label="关闭" @click="favorites = []">×</button>
+        <h3 id="favorites-title" class="font-serif">我的礼遇单</h3>
+        <div class="favorites-list">
+          <div v-if="favoritesLoading" class="loading-text">加载中…</div>
+          <div v-else-if="favorites.length === 0" class="empty-favorites">
+            <p>暂无收藏</p>
+          </div>
+          <div v-else>
+            <div v-for="f in favorites" :key="f.product_id" class="favorite-item">
+              <span class="favorite-name">{{ f.product_id }}</span>
+              <button type="button" class="btn-remove" @click="removeFavorite(f.product_id)">移除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 画像弹窗 -->
+    <div v-if="showProfile" class="modal-mask" role="presentation" @click.self="showProfile = false">
+      <div class="modal glass modal-profile" role="dialog" aria-labelledby="profile-title">
+        <div class="modal-handle" aria-hidden="true" />
+        <button type="button" class="modal-close" aria-label="关闭" @click="showProfile = false">×</button>
+        <h3 id="profile-title" class="font-serif">我的画像</h3>
+        <div class="profile-content">
+          <div class="profile-row">
+            <span class="profile-label">用户分组</span>
+            <span class="profile-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">用户ID</span>
+            <span class="profile-value">{{ userId }}</span>
+          </div>
+          <div class="profile-divider" />
+          <div class="profile-row">
+            <span class="profile-label">收礼关系</span>
+            <span class="profile-value">{{ relationLabels[form.relation] || '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">年龄段</span>
+            <span class="profile-value">{{ form.ageBand || '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">性别</span>
+            <span class="profile-value">{{ form.gender === 'female' ? '女' : form.gender === 'male' ? '男' : '未知/通用' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">场合</span>
+            <span class="profile-value">{{ occasionLabels[form.occasion] || '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">预算</span>
+            <span class="profile-value">{{ budgetLabels[form.budget] || '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">风格</span>
+            <span class="profile-value">{{ styleLabels[form.style] || '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">兴趣圈层</span>
+            <span class="profile-value">{{ form.interests.length ? form.interests.map(i => interestOptions.find(o => o.v === i)?.l || i).join(', ') : '未设置' }}</span>
+          </div>
+          <div class="profile-row">
+            <span class="profile-label">禁忌</span>
+            <span class="profile-value">{{ form.taboos.length ? form.taboos.map(t => t === 'smell' ? '气味敏感' : t === 'religion' ? '宗教禁忌' : t).join(', ') : '无' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    </main>
+
+    <!-- 4. 「我的」页面 -->
+    <section v-if="activeTab === 'profile'" class="profile-page">
+      <div class="profile-bg" aria-hidden="true" />
+      
+      <!-- 用户信息区 -->
+      <section class="profile-header glass">
+        <div class="avatar-wrap">
+          <div class="avatar">👤</div>
+          <button class="edit-btn" @click="showProfile = true">编辑资料</button>
+        </div>
+        <div class="user-info">
+          <h2 class="username font-serif">{{ group === 'A' ? '典藏组贵宾' : '策展组雅士' }}</h2>
+          <p class="user-group">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</p>
+          <p class="user-id">ID: {{ userId.slice(-8) }}</p>
+        </div>
+      </section>
+
+      <!-- 二级导航 -->
+      <section class="sub-nav glass">
+        <button 
+          class="sub-nav-item" 
+          :class="{ active: profileSubTab === 'favorites' }"
+          @click="profileSubTab = 'favorites'"
+        >
+          <span class="sub-nav-icon">♥</span>
+          <span class="sub-nav-text">我的收藏</span>
+          <span v-if="favorites.length > 0" class="sub-nav-badge">{{ favorites.length }}</span>
+        </button>
+        <button 
+          class="sub-nav-item" 
+          :class="{ active: profileSubTab === 'portrait' }"
+          @click="profileSubTab = 'portrait'"
+        >
+          <span class="sub-nav-icon">👤</span>
+          <span class="sub-nav-text">我的画像</span>
+        </button>
+      </section>
+
+      <!-- 二级导航内容区 -->
+      <section v-if="profileSubTab === 'favorites'" class="section glass">
+        <header class="section-header">
+          <h3 class="font-serif">我的礼遇单</h3>
+          <button class="link-ghost" @click="fetchFavorites">刷新</button>
+        </header>
+        <div v-if="favoritesLoading" class="loading-text">加载中…</div>
+        <div v-else-if="favorites.length === 0" class="empty-state-sm">
+          <p>暂无收藏，去逛逛吧</p>
+          <button type="button" class="cta-outline sm" @click="switchTab('browse')">去浏览</button>
+        </div>
+        <div v-else class="favorites-list">
+          <div v-for="item in favorites" :key="item.product_id" class="favorite-row glass">
+            <img :src="'https://img14.360buyimg.com/n1/jfs/t1/1/' + item.product_id + '/0.jpg'" class="favorite-thumb" />
+            <div class="favorite-info">
+              <span class="favorite-name">{{ item.product_id }}</span>
+              <span class="favorite-date">{{ formatDate(item.created_at) }}</span>
+            </div>
+            <button class="favorite-remove" @click="removeFavorite(item.product_id)">移除</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 画像详情 -->
+      <section v-else-if="profileSubTab === 'portrait'" class="section glass">
+        <header class="section-header">
+          <h3 class="font-serif">我的画像</h3>
+          <button class="link-ghost" @click="phase = 'tags'; switchTab('home')">修改偏好</button>
+        </header>
+        <div class="portrait-content">
+          <div class="portrait-row">
+            <span class="portrait-label">用户分组</span>
+            <span class="portrait-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">收礼关系</span>
+            <span class="portrait-value">{{ relationLabels[form.relation] || '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">年龄段</span>
+            <span class="portrait-value">{{ form.ageBand || '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">性别</span>
+            <span class="portrait-value">{{ form.gender === 'female' ? '女' : form.gender === 'male' ? '男' : '未知/通用' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">场合</span>
+            <span class="portrait-value">{{ occasionLabels[form.occasion] || '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">预算</span>
+            <span class="portrait-value">{{ budgetLabels[form.budget] || '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">风格</span>
+            <span class="portrait-value">{{ styleLabels[form.style] || '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">兴趣圈层</span>
+            <span class="portrait-value">{{ form.interests.length ? form.interests.map(i => interestOptions.find(o => o.v === i)?.l || i).join(', ') : '未设置' }}</span>
+          </div>
+          <div class="portrait-row">
+            <span class="portrait-label">禁忌</span>
+            <span class="portrait-value">{{ form.taboos.length ? form.taboos.map(t => t === 'smell' ? '气味敏感' : t === 'religion' ? '宗教禁忌' : t).join(', ') : '无' }}</span>
+          </div>
+        </div>
+      </section>
+
+      <footer class="profile-foot">匿名礼遇数据 · 不采集姓名与电话</footer>
+    </section>
+
+    <!-- 底部导航栏 -->
+    <nav v-show="phase !== 'landing'" class="tab-bar glass" role="navigation">
+      <button
+        type="button"
+        class="tab-item"
+        :class="{ active: activeTab === 'home' }"
+        @click="switchTab('home'); phase = 'landing'"
+        aria-label="首页"
+      >
+        <span class="tab-icon">🏠</span>
+        <span class="tab-text">首页</span>
+      </button>
+      <button
+        type="button"
+        class="tab-item"
+        :class="{ active: activeTab === 'browse' }"
+        @click="switchTab('browse')"
+        aria-label="浏览"
+      >
+        <span class="tab-icon">✨</span>
+        <span class="tab-text">礼遇</span>
+      </button>
+      <button
+        type="button"
+        class="tab-item"
+        :class="{ active: activeTab === 'profile' }"
+        @click="switchTab('profile')"
+        aria-label="我的"
+      >
+        <span class="tab-icon">👤</span>
+        <span class="tab-text">我的</span>
+      </button>
+    </nav>
   </div>
 </template>
 
@@ -820,6 +1118,42 @@ onUnmounted(() => {
   font-size: 10px;
   letter-spacing: 0.12em;
   color: #57534e;
+}
+.landing-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 16px;
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: rgba(28, 25, 23, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: #a8a29e;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.action-btn:hover {
+  border-color: rgba(202, 138, 4, 0.4);
+  color: #fafaf9;
+}
+.action-icon {
+  font-size: 16px;
+}
+.action-badge {
+  background: #ca8a04;
+  color: #0c0a09;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
 }
 
 /* —— Tags —— */
@@ -1431,5 +1765,399 @@ onUnmounted(() => {
   color: #57534e;
   text-align: center;
   line-height: 1.5;
+}
+
+/* —— Favorites Modal —— */
+.modal-favorites {
+  max-height: 70vh;
+}
+.favorites-list {
+  padding: 0 20px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.favorite-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.favorite-item:last-child {
+  border-bottom: none;
+}
+.favorite-name {
+  font-size: 14px;
+  color: #e7e5e4;
+}
+.btn-remove {
+  padding: 6px 14px;
+  background: rgba(185, 28, 28, 0.2);
+  border: 1px solid rgba(185, 28, 28, 0.3);
+  color: #fca5a5;
+  font-size: 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.empty-favorites {
+  text-align: center;
+  padding: 40px 0;
+  color: #78716c;
+}
+.loading-text {
+  text-align: center;
+  padding: 20px;
+  color: #a8a29e;
+}
+
+/* —— Profile Modal —— */
+.modal-profile {
+  max-height: 85vh;
+}
+.profile-content {
+  padding: 0 20px;
+}
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+}
+.profile-label {
+  font-size: 12px;
+  color: #a8a29e;
+  letter-spacing: 0.1em;
+}
+.profile-value {
+  font-size: 14px;
+  color: #fafaf9;
+  font-weight: 500;
+}
+.profile-divider {
+  height: 1px;
+  background: rgba(202, 138, 4, 0.2);
+  margin: 8px 0;
+}
+
+/* —— Profile Page —— */
+.profile-page {
+  min-height: 100vh;
+  padding-bottom: 80px;
+  background: linear-gradient(180deg, #1c1917 0%, #0c0a09 100%);
+}
+.profile-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 200px;
+  background: linear-gradient(180deg, rgba(202, 138, 4, 0.15) 0%, transparent 100%);
+}
+.profile-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 20px 20px;
+  margin: 0 12px 12px;
+  border-radius: 12px;
+}
+.avatar-wrap {
+  position: relative;
+}
+.avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ca8a04 0%, #78716c 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+}
+.edit-btn {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  padding: 4px 10px;
+  background: rgba(202, 138, 4, 0.2);
+  border: 1px solid rgba(202, 138, 4, 0.4);
+  color: #fbbf24;
+  font-size: 10px;
+  border-radius: 999px;
+}
+.user-info {
+  flex: 1;
+}
+.username {
+  font-size: 18px;
+  color: #fafaf9;
+  margin: 0 0 4px;
+}
+.user-group {
+  font-size: 11px;
+  color: #ca8a04;
+  letter-spacing: 0.1em;
+  margin: 0 0 4px;
+}
+.user-id {
+  font-size: 10px;
+  color: #78716c;
+  margin: 0;
+}
+
+/* —— Sub Navigation —— */
+.sub-nav {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  margin: 0 12px 12px;
+  border-radius: 12px;
+}
+.sub-nav-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: #78716c;
+  transition: all 0.2s;
+}
+.sub-nav-item.active {
+  background: rgba(202, 138, 4, 0.15);
+  border-color: rgba(202, 138, 4, 0.3);
+  color: #ca8a04;
+}
+.sub-nav-icon {
+  font-size: 18px;
+}
+.sub-nav-text {
+  font-size: 14px;
+  font-weight: 500;
+}
+.sub-nav-badge {
+  padding: 2px 8px;
+  background: #dc2626;
+  color: white;
+  font-size: 10px;
+  border-radius: 999px;
+}
+
+/* —— Quick Actions —— */
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  padding: 0 12px;
+  margin-bottom: 12px;
+}
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.action-card .action-icon {
+  font-size: 24px;
+}
+.action-card .action-text {
+  font-size: 12px;
+  color: #e7e5e4;
+}
+.action-card .action-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  background: #dc2626;
+  color: white;
+  font-size: 10px;
+  border-radius: 999px;
+}
+
+.section {
+  margin: 0 12px 12px;
+  padding: 16px;
+  border-radius: 12px;
+}
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.section-header h3 {
+  font-size: 16px;
+  color: #fafaf9;
+  margin: 0;
+}
+
+.fav-preview {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+}
+.fav-item {
+  flex-shrink: 0;
+  width: 80px;
+  text-align: center;
+}
+.fav-thumb {
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.fav-name {
+  font-size: 11px;
+  color: #a8a29e;
+}
+
+.preferences {
+  display: flex;
+  gap: 16px;
+}
+.pref-item {
+  flex: 1;
+  text-align: center;
+}
+.pref-label {
+  display: block;
+  font-size: 10px;
+  color: #78716c;
+  margin-bottom: 4px;
+}
+.pref-value {
+  font-size: 13px;
+  color: #e7e5e4;
+}
+
+/* —— Favorites List —— */
+.favorites-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.favorite-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+}
+.favorite-thumb {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.favorite-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.favorite-name {
+  font-size: 14px;
+  color: #fafaf9;
+}
+.favorite-date {
+  font-size: 11px;
+  color: #78716c;
+}
+.favorite-remove {
+  padding: 8px 14px;
+  background: rgba(185, 28, 28, 0.2);
+  border: 1px solid rgba(185, 28, 28, 0.3);
+  color: #fca5a5;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
+/* —— Portrait Content —— */
+.portrait-content {
+  padding: 0;
+}
+.portrait-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.portrait-row:last-child {
+  border-bottom: none;
+}
+.portrait-label {
+  font-size: 12px;
+  color: #a8a29e;
+  letter-spacing: 0.05em;
+}
+.portrait-value {
+  font-size: 14px;
+  color: #fafaf9;
+  font-weight: 500;
+}
+
+.empty-state-sm {
+  text-align: center;
+  padding: 20px 0;
+}
+.empty-state-sm p {
+  color: #78716c;
+  margin: 0 0 12px;
+}
+
+.profile-foot {
+  text-align: center;
+  padding: 20px;
+  font-size: 10px;
+  color: #57534e;
+}
+
+/* —— Tab Bar —— */
+.tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 520px;
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  background: rgba(12, 10, 9, 0.95);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px);
+  z-index: 100;
+}
+.tab-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 20px;
+  background: none;
+  border: none;
+  color: #78716c;
+}
+.tab-item.active {
+  color: #ca8a04;
+}
+.tab-icon {
+  font-size: 20px;
+}
+.tab-text {
+  font-size: 11px;
 }
 </style>

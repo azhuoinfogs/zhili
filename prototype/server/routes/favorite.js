@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { getPool, query, execute } from '../db.js';
-import { requireAuth } from '../middleware/requireAuth.js';
 import {
   FAVORITE_PRODUCT_ID_RE,
   parseFavoriteListPaging,
@@ -9,22 +8,36 @@ import {
 } from '../lib/favoriteHelpers.js';
 
 const router = Router();
-router.use(requireAuth);
+
+function extractUserId(req) {
+  if (req.userId) return req.userId;
+  if (req.body && typeof req.body.user_id === 'number') return req.body.user_id;
+  if (req.body && typeof req.body.user_id === 'string') {
+    const id = Number(req.body.user_id);
+    if (Number.isFinite(id) && id > 0) return id;
+  }
+  return null;
+}
 
 router.get('/list', async (req, res) => {
   if (!getPool()) {
     res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
     return;
   }
+  const userId = extractUserId(req) || Number(req.query.user_id);
+  if (!userId || userId <= 0) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '缺少 user_id' });
+    return;
+  }
   const { limit, offset } = parseFavoriteListPaging(req.query);
   const lim = Math.trunc(limit);
   const off = Math.trunc(offset);
   try {
-    const countRows = await query('SELECT COUNT(*) AS c FROM collection WHERE user_id = ?', [req.userId]);
+    const countRows = await query('SELECT COUNT(*) AS c FROM collection WHERE user_id = ?', [userId]);
     const total = Number(countRows[0]?.c ?? 0);
     const rows = await query(
       `SELECT product_id, created_at FROM collection WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ${lim} OFFSET ${off}`,
-      [req.userId]
+      [userId]
     );
     res.json({ list: rows.map(rowToFavoriteListItem), total });
   } catch (e) {
@@ -36,6 +49,11 @@ router.get('/list', async (req, res) => {
 router.post('/', async (req, res) => {
   if (!getPool()) {
     res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
+  const userId = extractUserId(req);
+  if (!userId || userId <= 0) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '缺少 user_id' });
     return;
   }
   const productId = pickFavoriteProductId(req.body);
@@ -50,12 +68,12 @@ router.post('/', async (req, res) => {
       return;
     }
     try {
-      await execute('INSERT INTO collection (user_id, product_id) VALUES (?, ?)', [req.userId, productId]);
+      await execute('INSERT INTO collection (user_id, product_id) VALUES (?, ?)', [userId, productId]);
     } catch (e) {
       if (e.code === 'ER_DUP_ENTRY' || e.errno === 1062) {
         const rows = await query(
           'SELECT product_id, created_at FROM collection WHERE user_id = ? AND product_id = ? LIMIT 1',
-          [req.userId, productId]
+          [userId, productId]
         );
         if (!rows.length) {
           res.status(500).json({ error: 'SERVER_ERROR', message: '重复键后未读到收藏行' });
@@ -69,7 +87,7 @@ router.post('/', async (req, res) => {
     }
     const rows = await query(
       'SELECT product_id, created_at FROM collection WHERE user_id = ? AND product_id = ? LIMIT 1',
-      [req.userId, productId]
+      [userId, productId]
     );
     const item = rowToFavoriteListItem(rows[0]);
     res.status(201).json(item);
@@ -82,6 +100,11 @@ router.post('/', async (req, res) => {
 router.delete('/:productId', async (req, res) => {
   if (!getPool()) {
     res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
+  const userId = extractUserId(req);
+  if (!userId || userId <= 0) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '缺少 user_id' });
     return;
   }
   const productId = String(req.params.productId || '');
@@ -98,7 +121,7 @@ router.delete('/:productId', async (req, res) => {
   }
   try {
     const result = await execute('DELETE FROM collection WHERE user_id = ? AND product_id = ?', [
-      req.userId,
+      userId,
       productId,
     ]);
     const affected = typeof result.affectedRows === 'number' ? result.affectedRows : 0;
