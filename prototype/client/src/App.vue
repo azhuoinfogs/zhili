@@ -222,16 +222,29 @@ function goExplore() {
 
 function switchTab(tab) {
   activeTab.value = tab;
-  if (tab === 'profile') {
-    track('view_profile');
-    fetchFavorites();
-  } else if (tab === 'browse') {
-    if (phase.value === 'landing') {
-      phase.value = 'tags';
-    } else if (phase.value === 'tags') {
-      goBrowse();
-    }
+}
+
+function goToHome() {
+  activeTab.value = 'home';
+  phase.value = 'landing';
+  track('navigate_home');
+}
+
+function goToBrowse() {
+  activeTab.value = 'browse';
+  if (phase.value === 'landing') {
+    phase.value = 'tags';
+  } else if (phase.value === 'tags' && products.value.length) {
+    phase.value = 'browse';
   }
+  track('navigate_browse');
+}
+
+function goToProfile() {
+  activeTab.value = 'profile';
+  profileSubTab.value = 'favorites';
+  fetchFavorites();
+  track('navigate_profile');
 }
 
 function formatDate(dateStr) {
@@ -932,12 +945,12 @@ onUnmounted(() => {
     </section>
 
     <!-- 底部导航栏 -->
-    <nav v-show="phase !== 'landing'" class="tab-bar glass" role="navigation">
+    <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
       <button
         type="button"
         class="tab-item"
         :class="{ active: activeTab === 'home' }"
-        @click="switchTab('home'); phase = 'landing'"
+        @click="goToHome"
         aria-label="首页"
       >
         <span class="tab-icon">🏠</span>
@@ -947,7 +960,7 @@ onUnmounted(() => {
         type="button"
         class="tab-item"
         :class="{ active: activeTab === 'browse' }"
-        @click="switchTab('browse')"
+        @click="goToBrowse"
         aria-label="浏览"
       >
         <span class="tab-icon">✨</span>
@@ -957,7 +970,7 @@ onUnmounted(() => {
         type="button"
         class="tab-item"
         :class="{ active: activeTab === 'profile' }"
-        @click="switchTab('profile')"
+        @click="goToProfile"
         aria-label="我的"
       >
         <span class="tab-icon">👤</span>
@@ -2140,6 +2153,9 @@ onUnmounted(() => {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   backdrop-filter: blur(20px);
   z-index: 100;
+}
+.tab-bar.hidden {
+  display: none;
 }
 .tab-item {
   display: flex;
