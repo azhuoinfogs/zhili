@@ -15,6 +15,7 @@ import adminProductRouter from './routes/adminProduct.js';
 import adminAuthRouter from './routes/adminAuth.js';
 import adminStatsRouter from './routes/adminStats.js';
 import adminUploadRouter from './routes/adminUpload.js';
+import productImportRouter from './routes/productImport.js';
 import { tryDualWriteCollectToEvent } from './lib/eventDualWrite.js';
 import { productsData } from './productsData.js';
 import { resolveProductById } from './lib/productResolve.js';
@@ -81,6 +82,7 @@ app.use('/api/product', productRouter);
 app.use('/api/favorite', favoriteRouter);
 app.use('/api/event', eventRouter);
 app.use('/api/admin/products', adminProductRouter);
+app.use('/api/import', productImportRouter);
 
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const uploadsDir = path.join(dataDir, 'uploads');

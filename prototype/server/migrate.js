@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATION_FILE = path.join(__dirname, 'migrations', '001_b0_schema.sql');
 const MIGRATION_002 = path.join(__dirname, 'migrations', '002_user_profile_scoring_align.sql');
 const MIGRATION_003 = path.join(__dirname, 'migrations', '003_product_listed.sql');
+const MIGRATION_004 = path.join(__dirname, 'migrations', '004_import_history.sql');
 
 function loadMigrationSql() {
   return fs.readFileSync(MIGRATION_FILE, 'utf8');
@@ -77,6 +78,17 @@ async function apply003ProductListedIfNeeded() {
   console.log('[知礼 DB] 003 product.listed:', MIGRATION_003);
 }
 
+/** 联盟导入历史表 */
+async function apply004ImportHistoryIfNeeded() {
+  if (await tableExists('import_history')) return;
+  const sql = fs.readFileSync(MIGRATION_004, 'utf8');
+  const statements = splitSqlStatements(sql);
+  for (const stmt of statements) {
+    await execute(stmt);
+  }
+  console.log('[知礼 DB] 004 import_history:', MIGRATION_004);
+}
+
 async function createTables() {
   try {
     await initDatabase();
@@ -87,6 +99,7 @@ async function createTables() {
     console.log('[知礼 DB] 001 迁移完成:', MIGRATION_FILE);
     await apply002UserProfileAlignIfNeeded();
     await apply003ProductListedIfNeeded();
+    await apply004ImportHistoryIfNeeded();
     console.log('[知礼 DB] 迁移流程结束');
     process.exit(0);
   } catch (error) {

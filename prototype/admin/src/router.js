@@ -3,6 +3,7 @@ import LoginView from './views/LoginView.vue';
 import ProductsView from './views/ProductsView.vue';
 import ProductEditView from './views/ProductEditView.vue';
 import DashboardView from './views/DashboardView.vue';
+import ImportView from './views/ImportView.vue';
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -13,6 +14,7 @@ const router = createRouter({
     { path: '/products/new', name: 'product-new', component: ProductEditView, props: () => ({ productId: null }) },
     { path: '/products/:id/edit', name: 'product-edit', component: ProductEditView, props: (r) => ({ productId: r.params.id }) },
     { path: '/dashboard', name: 'dashboard', component: DashboardView },
+    { path: '/import', name: 'import', component: ImportView },
   ],
 });
 
