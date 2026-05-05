@@ -45,11 +45,17 @@
       data-pos="{{idx}}"
       bindtap="openDetail"
     >
-      <image class="img" src="{{p.image}}" mode="aspectFill" />
+      <image class="img" src="{{p.image}}" mode="aspectFill" lazy-load />
       <view class="info">
         <text class="title">{{p.title}}</text>
-        <text class="price">¥{{p.price}}</text>
-        <text wx:if="{{p.reasons && p.reasons[0]}}" class="p-reason">{{p.reasons[0].icon}} {{p.reasons[0].text}}</text>
+        <view class="price-wrap">
+          <text class="price-symbol">¥</text>
+          <text class="price">{{p.price}}</text>
+        </view>
+        <view wx:if="{{p.reasons && p.reasons[0]}}" class="p-reason">
+          <text class="reason-icon">{{p.reasons[0].icon}}</text>
+          <text class="reason-text">{{p.reasons[0].text}}</text>
+        </view>
       </view>
     </view>
   </view>

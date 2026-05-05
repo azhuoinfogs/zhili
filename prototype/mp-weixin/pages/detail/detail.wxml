@@ -1,4 +1,5 @@
-<view wx:if="{{product}}" class="detail-wrap">
+<view wx:if="{{product}}" class="detail-wrap animate-fadeIn">
+  <!-- 商品图片区域 -->
   <swiper
     wx:if="{{imageUrls.length > 1}}"
     class="hero-swiper"
@@ -6,39 +7,96 @@
     indicator-color="rgba(255,255,255,0.25)"
     indicator-active-color="#ca8a04"
     bindchange="onSwiperChange"
+    circular
   >
     <swiper-item wx:for="{{imageUrls}}" wx:key="*this">
-      <image class="hero" src="{{item}}" mode="aspectFill" />
+      <image class="hero" src="{{item}}" mode="aspectFill" lazy-load />
     </swiper-item>
   </swiper>
-  <image wx:else class="hero" src="{{imageUrls[0] || product.image}}" mode="aspectFill" />
+  <image wx:else class="hero" src="{{imageUrls[0] || product.image}}" mode="aspectFill" lazy-load />
 
-  <view class="card">
-    <view class="title">{{product.title}}</view>
-    <view class="price">¥{{product.price}}</view>
-    <view wx:for="{{product.reasons}}" wx:key="index" wx:for-item="r" class="reason">{{r.icon}} {{r.text}}</view>
-    <button class="btn-secondary" bindtap="onCollect">收录礼遇单</button>
-    <button class="btn-primary" bindtap="onBuy">去购买（占位）</button>
+  <!-- 商品信息卡片 -->
+  <view class="card glass">
+    <view class="product-header">
+      <view class="title font-serif">{{product.title}}</view>
+      <view class="price-wrap">
+        <text class="price-symbol">¥</text>
+        <text class="price">{{product.price}}</text>
+      </view>
+    </view>
+
+    <!-- 推荐理由 -->
+    <view class="reasons-section" wx:if="{{product.reasons && product.reasons.length}}">
+      <view class="section-label">
+        <text class="label-icon">💡</text>
+        <text class="label-text">推荐理由</text>
+      </view>
+      <view class="reasons-stack">
+        <view wx:for="{{product.reasons}}" wx:key="index" wx:for-item="r" class="reason-card">
+          <text class="reason-icon">{{r.icon}}</text>
+          <text class="reason-text">{{r.text}}</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 商品描述 -->
+    <view class="desc-section" wx:if="{{product.description}}">
+      <view class="section-label">
+        <text class="label-icon">📋</text>
+        <text class="label-text">商品详情</text>
+      </view>
+      <text class="description">{{product.description}}</text>
+    </view>
+
+    <!-- 商品标签 -->
+    <view class="tags-section" wx:if="{{product.tags && product.tags.length}}">
+      <view class="tags-row">
+        <text wx:for="{{product.tags}}" wx:key="*this" class="tag">{{item}}</text>
+      </view>
+    </view>
+
+    <!-- 操作按钮 -->
+    <view class="actions-row">
+      <button class="btn-outline" bindtap="onCollect">
+        <text class="btn-icon">{{isCollected ? '♥' : '♡'}}</text>
+        <text>{{isCollected ? '已收藏' : '收录礼遇单'}}</text>
+      </button>
+      <button class="btn-gold" bindtap="onBuy">去购买</button>
+    </view>
   </view>
 
+  <!-- 相关推荐 -->
   <view wx:if="{{related.length}}" class="related-block">
-    <text class="related-title">相关推荐</text>
+    <view class="section-header">
+      <text class="section-title font-serif">相关礼遇</text>
+      <text class="section-sub">为您甄选</text>
+    </view>
     <scroll-view scroll-x class="related-scroll" enable-flex>
       <view
-        class="related-card"
+        class="related-card glass"
         wx:for="{{related}}"
         wx:key="id"
         data-id="{{item.id}}"
         bindtap="openRelated"
       >
-        <image class="related-img" src="{{item.image}}" mode="aspectFill" />
-        <text class="related-name">{{item.title}}</text>
+        <image class="related-img" src="{{item.image}}" mode="aspectFill" lazy-load />
+        <view class="related-info">
+          <text class="related-name">{{item.title}}</text>
+          <text class="related-price">¥{{item.price}}</text>
+        </view>
       </view>
     </scroll-view>
   </view>
 </view>
-<view wx:else class="hint">未找到商品</view>
 
+<view wx:else class="empty-state">
+  <text class="empty-icon">📦</text>
+  <text class="empty-title font-serif">未找到商品</text>
+  <text class="empty-desc">该商品暂不可用，请返回礼遇名录</text>
+  <button class="btn-outline" bindtap="goToBrowse">返回浏览</button>
+</view>
+
+<!-- 底部导航 -->
 <view class="custom-tab-bar">
   <view class="tab-item" bindtap="goToBrowse">
     <text class="tab-icon">🎁</text>

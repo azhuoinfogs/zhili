@@ -15,6 +15,7 @@ page {
   --lx-foot: #57534e;
   --lx-border: rgba(255, 255, 255, 0.08);
   --lx-glass: rgba(28, 25, 23, 0.55);
+  --lx-glass-light: rgba(28, 25, 23, 0.75);
 
   background-color: var(--lx-bg);
   color: var(--lx-text);
@@ -27,17 +28,26 @@ page {
   -webkit-font-smoothing: antialiased;
 }
 
-/* 玻璃卡片（对齐 client .glass + .product-card） */
+/* 玻璃卡片效果 */
+.glass {
+  background: var(--lx-glass);
+  backdrop-filter: blur(36rpx);
+  -webkit-backdrop-filter: blur(36rpx);
+  border: 1rpx solid var(--lx-border);
+  box-shadow: 0 16rpx 64rpx rgba(0, 0, 0, 0.4);
+}
+
+/* 标准卡片 */
 .card {
   background: var(--lx-glass);
   border: 1rpx solid var(--lx-border);
-  border-radius: 4rpx;
+  border-radius: 8rpx;
   padding: 32rpx;
   margin: 24rpx;
   box-shadow: 0 16rpx 64rpx rgba(0, 0, 0, 0.35);
 }
 
-/* 主按钮：对齐 client .cta-explore / .btn-outline 金色描边 */
+/* 主按钮：金色描边 */
 .btn-primary {
   margin: 48rpx 32rpx 32rpx;
   padding: 28rpx 40rpx;
@@ -52,4 +62,69 @@ page {
 
 button.btn-primary::after {
   border: none;
+}
+
+/* 金色按钮 */
+.btn-gold {
+  background: linear-gradient(135deg, rgba(202, 138, 4, 0.2), rgba(202, 138, 4, 0.05)) !important;
+  color: var(--lx-gold-bright) !important;
+  border: 2rpx solid rgba(202, 138, 4, 0.5) !important;
+}
+
+/* 文字按钮 */
+.btn-text {
+  background: transparent !important;
+  color: var(--lx-muted) !important;
+  border: none !important;
+  font-size: 24rpx;
+}
+
+button.btn-text::after {
+  border: none;
+}
+
+/* 分割线 */
+.divider {
+  height: 1rpx;
+  background: var(--lx-border);
+  margin: 24rpx 0;
+}
+
+/* 标签样式 */
+.tag {
+  display: inline-block;
+  padding: 8rpx 20rpx;
+  background: rgba(202, 138, 4, 0.12);
+  border: 1rpx solid rgba(202, 138, 4, 0.3);
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  color: var(--lx-gold-bright);
+  letter-spacing: 0.08em;
+}
+
+/* 渐变文字 */
+.text-gradient {
+  background: linear-gradient(135deg, var(--lx-gold), var(--lx-gold-bright));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 动画类 */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20rpx); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.animate-pulse {
+  animation: pulse 2s ease-in-out infinite;
 }

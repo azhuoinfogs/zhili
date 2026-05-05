@@ -20,11 +20,15 @@
     "list": [
       {
         "pagePath": "pages/browse/browse",
-        "text": "礼遇"
+        "text": "礼遇",
+        "iconPath": "images/browse.png",
+        "selectedIconPath": "images/browse-active.png"
       },
       {
         "pagePath": "pages/profile/profile",
-        "text": "我的"
+        "text": "我的",
+        "iconPath": "images/profile.png",
+        "selectedIconPath": "images/profile-active.png"
       }
     ]
   },
