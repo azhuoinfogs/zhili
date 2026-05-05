@@ -134,4 +134,12 @@ Page({
     if (!id) return;
     wx.navigateTo({ url: `/pages/detail/detail?id=${encodeURIComponent(id)}` });
   },
+  
+  goToBrowse() {
+    wx.switchTab({ url: '/pages/browse/browse' });
+  },
+  
+  goToProfile() {
+    wx.switchTab({ url: '/pages/profile/profile' });
+  },
 });

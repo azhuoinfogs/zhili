@@ -38,3 +38,14 @@
   </view>
 </view>
 <view wx:else class="hint">未找到商品</view>
+
+<view class="custom-tab-bar">
+  <view class="tab-item" bindtap="goToBrowse">
+    <text class="tab-icon">🎁</text>
+    <text class="tab-text">礼遇</text>
+  </view>
+  <view class="tab-item" bindtap="goToProfile">
+    <text class="tab-icon">👤</text>
+    <text class="tab-text">我的</text>
+  </view>
+</view>
