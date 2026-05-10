@@ -980,9 +980,10 @@ if (process.env.NODE_ENV === 'development') {
 ### 8.2 小程序端
 
 - [x] 创建 `utils/request.js` 统一请求模块 ✅
-- [ ] 修改 `utils/auth.js` 登录流程
-- [ ] 迁移 `utils/fetchList.js` 使用 request 模块
-- [ ] 迁移 `utils/favorite.js` 使用 request 模块
+- [x] 修改 `utils/auth.js` 登录流程 ✅
+- [x] 迁移 `utils/fetchList.js` 使用 request 模块 ✅
+- [x] 迁移 `utils/favorite.js` 使用 request 模块 ✅
+- [x] 迁移 `utils/track.js` 使用 request 模块 ✅
 - [ ] 配置微信公众平台服务器域名
 - [ ] 添加请求缓存策略
 

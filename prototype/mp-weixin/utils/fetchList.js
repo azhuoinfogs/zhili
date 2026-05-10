@@ -1,19 +1,23 @@
 const { getProfile, getOrCreateGroup } = require('./storage.js');
+const { get } = require('./request.js');
 
 const PAGE_SIZE = 10;
 
 async function fetchRecommendChunk({ base, group, profile, listFilters, offset }) {
   try {
-    const result = await wx.cloud.callFunction({
-      name: 'product',
-      data: { action: 'list' }
-    });
+    const params = {
+      page: Math.floor(offset / PAGE_SIZE) + 1,
+      size: PAGE_SIZE,
+      ...listFilters
+    };
     
-    if (result.result && result.result.success) {
-      let products = result.result.data;
+    const result = await get('/api/recommend', params);
+    
+    if (result && result.success) {
+      let products = result.data || [];
       
       if (group === 'A') {
-        products = [...products].sort((a, b) => b.sales - a.sales);
+        products = [...products].sort((a, b) => (b.sales || 0) - (a.sales || 0));
       }
       
       const { occasion, budget, style } = listFilters;
@@ -37,9 +41,9 @@ async function fetchRecommendChunk({ base, group, profile, listFilters, offset }
         products = products.filter(p => p.tags?.includes(style));
       }
       
-      const chunk = products.slice(offset, offset + PAGE_SIZE).map(p => ({
-        id: p.productId,
-        productId: p.productId,
+      const chunk = products.map(p => ({
+        id: p.productId || p.id,
+        productId: p.productId || p.id,
         name: p.name || p.title || '未知商品',
         title: p.title || p.name || '未知商品',
         description: p.description,
@@ -50,7 +54,7 @@ async function fetchRecommendChunk({ base, group, profile, listFilters, offset }
       
       return chunk;
     } else {
-      throw new Error(result.result?.error || '获取推荐失败');
+      throw new Error(result?.error || '获取推荐失败');
     }
   } catch (err) {
     console.error('fetchRecommendChunk error:', err);
@@ -63,23 +67,20 @@ async function fetchRecommendList(base, profile = null) {
   const group = getOrCreateGroup();
   
   try {
-    const result = await wx.cloud.callFunction({
-      name: 'product',
-      data: { action: 'list' }
-    });
+    const result = await get('/api/recommend', { page: 1, size: 20 });
     
-    if (result.result && result.result.success) {
-      let products = result.result.data;
+    if (result && result.success) {
+      let products = result.data || [];
       
       if (group === 'A') {
-        products = [...products].sort((a, b) => b.sales - a.sales).slice(0, 20);
+        products = [...products].sort((a, b) => (b.sales || 0) - (a.sales || 0)).slice(0, 20);
       }
       
       return {
         success: true,
         list: products.map(p => ({
-          id: p.productId,
-          productId: p.productId,
+          id: p.productId || p.id,
+          productId: p.productId || p.id,
           name: p.name || p.title || '未知商品',
           title: p.title || p.name || '未知商品',
           description: p.description,
@@ -89,7 +90,7 @@ async function fetchRecommendList(base, profile = null) {
         }))
       };
     } else {
-      throw new Error(result.result?.error || '获取推荐失败');
+      throw new Error(result?.error || '获取推荐失败');
     }
   } catch (err) {
     console.error('fetchRecommendList error:', err);
@@ -99,18 +100,15 @@ async function fetchRecommendList(base, profile = null) {
 
 async function fetchProductDetail(base, productId, profile = null) {
   try {
-    const result = await wx.cloud.callFunction({
-      name: 'product',
-      data: { action: 'detail', productId }
-    });
+    const result = await get(`/api/product/${productId}`);
     
-    if (result.result && result.result.success) {
-      const p = result.result.data;
+    if (result && result.success) {
+      const p = result.data;
       return {
         success: true,
         data: {
-          id: p.productId,
-          productId: p.productId,
+          id: p.productId || p.id,
+          productId: p.productId || p.id,
           name: p.name,
           description: p.description,
           price: p.price,
@@ -119,7 +117,7 @@ async function fetchProductDetail(base, productId, profile = null) {
         }
       };
     } else {
-      throw new Error(result.result?.error || '获取商品详情失败');
+      throw new Error(result?.error || '获取商品详情失败');
     }
   } catch (err) {
     console.error('fetchProductDetail error:', err);
@@ -129,17 +127,14 @@ async function fetchProductDetail(base, productId, profile = null) {
 
 async function fetchRelatedProducts(base, productId, profile = null) {
   try {
-    const result = await wx.cloud.callFunction({
-      name: 'product',
-      data: { action: 'related', productId }
-    });
+    const result = await get(`/api/related/${productId}`);
     
-    if (result.result && result.result.success) {
+    if (result && result.success) {
       return {
         success: true,
-        data: result.result.data.map(p => ({
-          id: p.productId,
-          productId: p.productId,
+        data: (result.data || []).map(p => ({
+          id: p.productId || p.id,
+          productId: p.productId || p.id,
           name: p.name || p.title || '未知商品',
           title: p.title || p.name || '未知商品',
           price: p.price,
@@ -147,7 +142,7 @@ async function fetchRelatedProducts(base, productId, profile = null) {
         }))
       };
     } else {
-      throw new Error(result.result?.error || '获取相关推荐失败');
+      throw new Error(result?.error || '获取相关推荐失败');
     }
   } catch (err) {
     console.error('fetchRelatedProducts error:', err);

@@ -1,4 +1,5 @@
 const { getToken } = require('./auth.js');
+const { post, get, delete: del } = require('./request.js');
 
 const FAVORITE_KEY = 'zhili_favorites';
 
@@ -47,17 +48,17 @@ async function toggleFavorite(productId, isCollected, productInfo = {}) {
   }
   
   try {
-    const action = isCollected ? 'remove' : 'add';
-    const result = await wx.cloud.callFunction({
-      name: 'favorite',
-      data: {
-        action,
+    let result;
+    if (isCollected) {
+      result = await del(`/api/favorite/${productId}`);
+    } else {
+      result = await post('/api/favorite', {
         productId,
-        productInfo: !isCollected ? productInfo : undefined
-      }
-    });
+        ...productInfo
+      });
+    }
     
-    if (result.result && result.result.success) {
+    if (result && result.success) {
       const local = getLocalFavorites();
       let list = [...local.list];
       const index = list.findIndex(item => item.product_id === productId);
@@ -69,10 +70,9 @@ async function toggleFavorite(productId, isCollected, productInfo = {}) {
       }
       setLocalFavorites(list);
       
-      return { success: true, isCollected: result.result.isCollected };
+      return { success: true, isCollected: !isCollected };
     } else {
-      const errorMsg = result.result?.error || '操作失败';
-      // 如果是"已收藏"或"未收藏"，视为成功但状态不变
+      const errorMsg = result?.error || '操作失败';
       if (errorMsg === '已收藏' || errorMsg === '未收藏') {
         return { success: true, isCollected: !isCollected, message: errorMsg };
       }
@@ -90,13 +90,10 @@ async function getFavoriteList() {
   }
   
   try {
-    const result = await wx.cloud.callFunction({
-      name: 'favorite',
-      data: { action: 'list' }
-    });
+    const result = await get('/api/favorite');
     
-    if (result.result && result.result.success) {
-      const cloudList = result.result.data.map(item => ({
+    if (result && result.success) {
+      const cloudList = result.data.map(item => ({
         product_id: item.productId || item.product_id,
         name: item.name || item.productName || '未知商品',
         price: item.price || item.productPrice || 0,

@@ -1,4 +1,5 @@
 const { getOrCreateZhiliVid } = require('./storage.js');
+const { post } = require('./request.js');
 
 const TOKEN_KEY = 'zhili_token';
 const USER_KEY = 'zhili_user';
@@ -51,21 +52,19 @@ async function wechatLogin() {
         
         try {
           const anon_id = getOrCreateZhiliVid();
-          const result = await wx.cloud.callFunction({
-            name: 'login',
-            data: {
-              code: res.code,
-              anon_id
-            }
-          });
+          const result = await post('/api/user/login', {
+            code: res.code,
+            anon_id,
+            platform: 'wechat_mini'
+          }, { needAuth: false });
           
-          if (result.result && result.result.success) {
-            const { data } = result.result;
+          if (result && result.success) {
+            const { data } = result;
             setToken(data.token);
             setUser(data);
             resolve(data);
           } else {
-            reject(new Error(result.result?.error || '登录失败'));
+            reject(new Error(result?.error || '登录失败'));
           }
         } catch (err) {
           reject(err);
