@@ -1,5 +1,9 @@
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, watch, computed } from 'vue';
+import { isLoggedIn, getUser, logout } from './utils/auth.js';
+import LoginPage from './components/LoginPage.vue';
+import RegisterPage from './components/RegisterPage.vue';
+import ProfilePage from './components/ProfilePage.vue';
 
 const STORAGE_KEYS = { uid: 'zhili_vid', group: 'zhili_group', profile: 'zhili_profile' };
 
@@ -23,7 +27,10 @@ function getOrCreateGroup() {
 
 const userId = ref('');
 const group = ref('');
-/** landing 首页 → tags 标签选择 → browse 推荐列表 */
+const user = ref(null);
+const loggedIn = ref(false);
+const currentPage = ref('landing');
+
 const phase = ref('landing');
 const loading = ref(false);
 const loadingMore = ref(false);
@@ -47,8 +54,7 @@ let io = null;
 const favorites = ref([]);
 const favoritesLoading = ref(false);
 const showProfile = ref(false);
-const activeTab = ref('home'); // home, browse, profile
-const profileSubTab = ref('favorites'); // favorites, portrait
+const activeTab = ref('home');
 
 function showToast(msg) {
   toastMsg.value = msg;
@@ -94,103 +100,75 @@ const relationLabels = {
   family: '家人',
   friend: '朋友',
   colleague: '同事',
-  elder: '长辈',
-  teacher: '老师',
-  client: '客户',
-  other: '其他'
+  customer: '客户',
+  leader: '长辈/上级'
 };
 
-function track(event, extra = {}) {
-  const payload = JSON.stringify({
-    event,
-    user_id: userId.value,
-    group: group.value,
-    page_name: 'zhili_luxury',
-    timestamp: Date.now(),
-    ...extra
-  });
-  try {
-    fetch('/api/collect', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload,
-      keepalive: true
-    }).catch(() => {});
-  } catch (_) {}
-}
-
 function toggleInterest(v) {
-  const i = form.interests.indexOf(v);
-  if (i >= 0) form.interests.splice(i, 1);
-  else if (form.interests.length < 3) form.interests.push(v);
-  else showToast('兴趣最多选 3 个');
+  const idx = form.interests.indexOf(v);
+  if (idx >= 0) {
+    form.interests.splice(idx, 1);
+  } else {
+    form.interests.push(v);
+  }
 }
 
 function toggleTaboo(v) {
-  const i = form.taboos.indexOf(v);
-  if (i >= 0) form.taboos.splice(i, 1);
-  else form.taboos.push(v);
+  const idx = form.taboos.indexOf(v);
+  if (idx >= 0) {
+    form.taboos.splice(idx, 1);
+  } else {
+    form.taboos.push(v);
+  }
 }
 
 const profilePayload = computed(() => ({
   relation: form.relation,
-  ageBand: form.ageBand,
-  interests: [...form.interests],
+  age_band: form.ageBand,
+  interests: form.interests,
   occasion: form.occasion,
   budget: form.budget,
   gender: form.gender,
-  style: form.style || undefined,
-  taboos: form.taboos.length ? [...form.taboos] : []
+  taboos: form.taboos,
+  style: form.style
 }));
 
-function shelfQueryString() {
-  const q = new URLSearchParams();
-  if (listFilters.occasion) q.set('occasion', listFilters.occasion);
-  if (listFilters.budget) q.set('budget', listFilters.budget);
-  if (listFilters.style) q.set('style', listFilters.style);
-  return q.toString();
+function track(eventName, props = {}) {
+  const data = {
+    event: eventName,
+    user_id: userId.value,
+    group: group.value,
+    timestamp: Date.now(),
+    ...props
+  };
+  try {
+    fetch('/api/track', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch {
+    console.log('Track failed:', eventName);
+  }
 }
 
 async function fetchRecommendations(reset = false) {
-  if (reset) {
-    loading.value = true;
-    hasMore.value = true;
-    products.value = [];
-  } else {
-    if (!hasMore.value || loadingMore.value || loading.value) return;
-    loadingMore.value = true;
-  }
-  const offset = reset ? 0 : products.value.length;
+  loading.value = reset;
   try {
-    const shelf = {
-      occasion: listFilters.occasion || '',
-      budget: listFilters.budget || '',
-      style: listFilters.style || ''
-    };
-    let chunk = [];
-    if (group.value === 'A') {
-      const q = new URLSearchParams(shelfQueryString());
-      q.set('offset', String(offset));
-      q.set('limit', String(PAGE_SIZE));
-      const r = await fetch('/api/hot?' + q.toString());
-      chunk = await r.json();
-    } else {
-      const r = await fetch('/api/personalized', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...profilePayload.value,
-          shelf,
-          offset,
-          limit: PAGE_SIZE
-        })
-      });
-      chunk = await r.json();
+    const q = encodeURIComponent(JSON.stringify(profilePayload.value));
+    const offset = reset ? 0 : products.value.length;
+    const r = await fetch(`/api/recommend?profile=${q}&offset=${offset}&limit=${PAGE_SIZE}`);
+    if (r.ok) {
+      const data = await r.json();
+      if (reset) {
+        products.value = data.list || [];
+      } else {
+        products.value.push(...(data.list || []));
+      }
+      hasMore.value = (data.list || []).length >= PAGE_SIZE;
     }
-    if (reset) products.value = chunk;
-    else products.value = products.value.concat(chunk);
-    hasMore.value = chunk.length >= PAGE_SIZE;
-    setupImpressionObserver();
+  } catch {
+    console.log('Fetch recommendations failed');
   } finally {
     loading.value = false;
     loadingMore.value = false;
@@ -207,21 +185,13 @@ function scheduleRefetch() {
   }, 500);
 }
 
-watch(
-  listFilters,
-  () => {
-    scheduleRefetch();
-  },
-  { deep: true }
-);
+watch(listFilters, () => {
+  scheduleRefetch();
+}, { deep: true });
 
 function goExplore() {
   track('explore_click', {});
   phase.value = 'tags';
-}
-
-function switchTab(tab) {
-  activeTab.value = tab;
 }
 
 function goToHome() {
@@ -242,21 +212,9 @@ function goToBrowse() {
 
 function goToProfile() {
   activeTab.value = 'profile';
-  profileSubTab.value = 'favorites';
+  currentPage.value = 'profile';
   fetchFavorites();
   track('navigate_profile');
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diff = now - date;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  if (days === 0) return '今天';
-  if (days === 1) return '昨天';
-  if (days < 7) return `${days}天前`;
-  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
 function backToHome() {
@@ -311,48 +269,33 @@ function onPullMove(e) {
   const dy = e.touches[0].clientY - pullStartY;
   if (dy > 0 && el.scrollTop <= 0) {
     pullDistance.value = Math.min(dy * 0.45, 72);
-    if (pullDistance.value > 10) e.preventDefault();
   }
 }
 
 function onPullEnd() {
-  if (!pullArm) {
-    pullDistance.value = 0;
-    return;
-  }
+  if (!pullArm) return;
   pullArm = false;
-  if (pullDistance.value > 44) {
+  if (pullDistance.value > 40 && !loading.value) {
     refreshing.value = true;
-    track('pull_refresh', {});
     void fetchRecommendations(true);
-  } else {
-    pullDistance.value = 0;
   }
+  pullDistance.value = 0;
 }
 
-function clearListFilters() {
-  listFilters.occasion = '';
-  listFilters.budget = '';
-  listFilters.style = '';
-}
-
-function setupImpressionObserver() {
-  seenImp.clear();
-  if (io) io.disconnect();
-  io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((e) => {
-        if (!e.isIntersecting) return;
-        const el = e.target;
-        const id = el.dataset.id;
-        const pos = el.dataset.pos;
-        if (!id || seenImp.has(id)) return;
+function handleIntersection(entries) {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      const id = entry.target.getAttribute('data-imp-card');
+      if (id && !seenImp.has(id)) {
         seenImp.add(id);
-        track('impression', { product_id: id, position: Number(pos) });
-      });
-    },
-    { root: null, threshold: 0.4 }
-  );
+        track('impression', { product_id: id });
+      }
+    }
+  });
+}
+
+function setupIntersectionObserver() {
+  io = new IntersectionObserver(handleIntersection, { root: null, threshold: 0.4 });
   requestAnimationFrame(() => {
     document.querySelectorAll('[data-imp-card]').forEach((el) => io.observe(el));
   });
@@ -407,10 +350,14 @@ function closeDetail() {
 async function onCollect(p) {
   track('collect', { product_id: p.id });
   try {
+    const token = localStorage.getItem('zhili_token');
     const res = await fetch('/api/favorite', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ product_id: p.id, user_id: userId.value })
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ product_id: p.id })
     });
     if (res.ok) {
       showToast('已收藏');
@@ -426,7 +373,10 @@ async function onCollect(p) {
 async function fetchFavorites() {
   favoritesLoading.value = true;
   try {
-    const res = await fetch(`/api/favorite/list?user_id=${userId.value}`);
+    const token = localStorage.getItem('zhili_token');
+    const res = await fetch('/api/favorite', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
     if (res.ok) {
       const data = await res.json();
       favorites.value = data.list || [];
@@ -440,10 +390,13 @@ async function fetchFavorites() {
 
 async function removeFavorite(productId) {
   try {
+    const token = localStorage.getItem('zhili_token');
     const res = await fetch(`/api/favorite/${productId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId.value })
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      }
     });
     if (res.ok) {
       const idx = favorites.value.findIndex(f => f.product_id === productId);
@@ -460,9 +413,58 @@ function onPurchase(p) {
   showToast('已记录礼遇意向');
 }
 
+function handleLoginSuccess() {
+  user.value = getUser();
+  loggedIn.value = true;
+  currentPage.value = 'main';
+  phase.value = 'landing';
+  showToast('登录成功');
+}
+
+function handleRegisterSuccess() {
+  user.value = getUser();
+  loggedIn.value = true;
+  currentPage.value = 'main';
+  phase.value = 'landing';
+  showToast('注册成功');
+}
+
+function handleLogout() {
+  logout();
+  loggedIn.value = false;
+  user.value = null;
+  currentPage.value = 'landing';
+  showToast('已退出登录');
+}
+
+function goToLogin() {
+  currentPage.value = 'login';
+}
+
+function goToRegister() {
+  currentPage.value = 'register';
+}
+
+function goToMain() {
+  currentPage.value = 'main';
+}
+
+function goBackFromProfile() {
+  currentPage.value = 'main';
+}
+
 onMounted(() => {
   userId.value = getOrCreateUserId();
   group.value = getOrCreateGroup();
+  loggedIn.value = isLoggedIn();
+  user.value = getUser();
+  
+  if (!loggedIn.value) {
+    currentPage.value = 'landing';
+  } else {
+    currentPage.value = 'main';
+  }
+  
   track('page_view', { phase: 'landing' });
 });
 
@@ -476,507 +478,419 @@ onUnmounted(() => {
   <div class="app">
     <div v-if="toastMsg" class="toast" role="status" aria-live="polite">{{ toastMsg }}</div>
 
-    <!-- 主内容区 -->
-    <main v-if="activeTab !== 'profile'">
-      <!-- 1. 奢侈品电商风首页 -->
-      <section v-if="phase === 'landing'" class="landing">
-      <div class="landing-bg" aria-hidden="true" />
-      <div class="landing-top">
-        <span class="pill-ab">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</span>
-        <span class="landing-refine">Ref. {{ userId.slice(-8) }}</span>
-      </div>
-      <div class="landing-center">
-        <p class="landing-eyebrow">Curated Gifting</p>
-        <h1 class="landing-title font-serif">知礼</h1>
-        <p class="landing-sub font-serif">懂礼更懂你</p>
-        <p class="landing-lead">
-          为重要的人甄选一份得体之礼。<br />以品味与场景为引，开启您的私人推荐。
-        </p>
-        <button type="button" class="cta-explore" @click="goExplore">探索商品</button>
-        <p class="landing-hint">轻触即进入偏好标签，由算法为您呈献候选名录。</p>
-      </div>
-      <footer class="landing-foot">匿名礼遇数据 · 不采集姓名与电话</footer>
-    </section>
-
-    <!-- 2. 标签 / 画像选择 -->
-    <section v-else-if="phase === 'tags'" class="tags-screen">
-      <header class="tags-head glass">
-        <button type="button" class="link-ghost" @click="backToHome">← 返回首页</button>
-        <h2 class="tags-title font-serif">偏好与场景</h2>
-        <p class="tags-sub">请选择收礼人标签，我们将据此匹配礼遇清单。</p>
-      </header>
-
-      <main class="tags-body glass">
-        <label for="fld-relation" class="lx-label">关系</label>
-        <select id="fld-relation" v-model="form.relation" class="lx-input" autocomplete="off">
-          <option v-for="(l, k) in relationLabels" :key="k" :value="k">{{ l }}</option>
-        </select>
-
-        <label for="fld-age" class="lx-label">年龄段</label>
-        <select id="fld-age" v-model="form.ageBand" class="lx-input" autocomplete="off">
-          <option value="under18">&lt;18</option>
-          <option value="18-25">18–25</option>
-          <option value="26-35">26–35</option>
-          <option value="36-45">36–45</option>
-          <option value="46plus">46+</option>
-        </select>
-
-        <label for="fld-gender" class="lx-label">收礼人性别</label>
-        <select id="fld-gender" v-model="form.gender" class="lx-input" autocomplete="off">
-          <option value="unknown">未知 / 通用</option>
-          <option value="female">女</option>
-          <option value="male">男</option>
-        </select>
-
-        <label for="fld-occasion" class="lx-label">场合</label>
-        <select id="fld-occasion" v-model="form.occasion" class="lx-input" autocomplete="off">
-          <option value="birthday">生日</option>
-          <option value="anniversary">纪念日</option>
-          <option value="festival">节日</option>
-          <option value="thanks">感谢</option>
-          <option value="apology">道歉</option>
-          <option value="casual">无理由</option>
-        </select>
-
-        <label for="fld-budget" class="lx-label">预算</label>
-        <select id="fld-budget" v-model="form.budget" class="lx-input" autocomplete="off">
-          <option value="lt100">&lt;100</option>
-          <option value="100-300">100–300</option>
-          <option value="300-500">300–500</option>
-          <option value="500-1000">500–1000</option>
-          <option value="1000+">1000+</option>
-        </select>
-
-        <label for="fld-style" class="lx-label">风格</label>
-        <select id="fld-style" v-model="form.style" class="lx-input" autocomplete="off">
-          <option value="practical">实用</option>
-          <option value="ritual">仪式</option>
-          <option value="quirky">搞怪</option>
-          <option value="warm">温情</option>
-        </select>
-
-        <span id="interest-label" class="lx-label">兴趣圈层（最多 3 项，可跳过）</span>
-        <div class="lx-chips" role="group" aria-labelledby="interest-label">
-          <button
-            v-for="o in interestOptions"
-            :key="o.v"
-            type="button"
-            class="lx-chip"
-            :class="{ on: form.interests.includes(o.v) }"
-            @click="toggleInterest(o.v)"
-          >
-            {{ o.l }}
-          </button>
+    <div v-if="!loggedIn">
+      <LoginPage 
+        v-if="currentPage === 'login'" 
+        @login-success="handleLoginSuccess"
+        @go-register="goToRegister"
+      />
+      
+      <RegisterPage 
+        v-else-if="currentPage === 'register'" 
+        @register-success="handleRegisterSuccess"
+        @go-login="goToLogin"
+      />
+      
+      <section v-else class="landing">
+        <div class="landing-bg" aria-hidden="true"></div>
+        <div class="landing-top">
+          <span class="pill-ab">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</span>
+          <span class="landing-refine">Ref. {{ userId.slice(-8) }}</span>
         </div>
-
-        <span id="taboo-label" class="lx-label">禁忌（可选）</span>
-        <div class="lx-chips" role="group" aria-labelledby="taboo-label">
-          <button type="button" class="lx-chip" :class="{ on: form.taboos.includes('smell') }" @click="toggleTaboo('smell')">气味敏感</button>
-          <button type="button" class="lx-chip" :class="{ on: form.taboos.includes('religion') }" @click="toggleTaboo('religion')">宗教禁忌</button>
-        </div>
-
-        <button type="button" class="cta-gold" :disabled="loading" @click="submitTags">
-          <span v-if="loading" class="btn-spinner" aria-hidden="true" />
-          {{ loading ? '正在遴选…' : '呈献推荐' }}
-        </button>
-      </main>
-    </section>
-
-    <!-- 3. 推荐列表（可滚动、下拉刷新、触底分页） -->
-    <section v-else class="browse-screen" :aria-busy="loading">
-      <header class="browse-head glass">
-        <button type="button" class="link-ghost" @click="backToTags">← 调整标签</button>
-        <h2 class="browse-title font-serif">礼遇名录</h2>
-        <p class="browse-meta">{{ group === 'A' ? '典藏热门序列' : '个性化策展序列' }}</p>
-      </header>
-
-      <div
-        ref="browseScrollRef"
-        class="browse-scroll"
-        @scroll.passive="onBrowseScroll"
-        @touchstart.passive="onPullStart"
-        @touchmove="onPullMove"
-        @touchend.passive="onPullEnd"
-        @touchcancel.passive="onPullEnd"
-      >
-        <div class="pull-indicator" :style="{ height: pullDistance + 'px', opacity: pullDistance > 4 ? 1 : 0 }">
-          <span v-if="refreshing" class="pull-text">刷新中…</span>
-          <span v-else-if="pullDistance > 44" class="pull-text">松开刷新</span>
-          <span v-else-if="pullDistance > 8" class="pull-text">下拉刷新</span>
-        </div>
-
-        <div class="filter-bar glass">
-          <p class="filter-eyebrow">Refine</p>
-          <div class="filter-row">
-            <label class="filter-label" for="flt-occ">场合</label>
-            <select id="flt-occ" v-model="listFilters.occasion" class="lx-input sm">
-              <option value="">全部</option>
-              <option value="birthday">生日</option>
-              <option value="anniversary">纪念日</option>
-              <option value="festival">节日</option>
-              <option value="thanks">感谢</option>
-              <option value="apology">道歉</option>
-              <option value="casual">无理由</option>
-            </select>
-          </div>
-          <div class="filter-row">
-            <label class="filter-label" for="flt-bud">预算</label>
-            <select id="flt-bud" v-model="listFilters.budget" class="lx-input sm">
-              <option value="">全部</option>
-              <option value="lt100">&lt;100</option>
-              <option value="100-300">100–300</option>
-              <option value="300-500">300–500</option>
-              <option value="500-1000">500–1000</option>
-              <option value="1000+">1000+</option>
-            </select>
-          </div>
-          <div class="filter-row">
-            <label class="filter-label" for="flt-style">风格</label>
-            <select id="flt-style" v-model="listFilters.style" class="lx-input sm">
-              <option value="">全部</option>
-              <option value="practical">实用</option>
-              <option value="ritual">仪式</option>
-              <option value="quirky">搞怪</option>
-              <option value="warm">温情</option>
-            </select>
-          </div>
-          <button type="button" class="filter-clear" @click="clearListFilters">清空筛选</button>
-        </div>
-
-        <div v-if="loading" class="skeleton-grid" aria-hidden="true">
-          <div v-for="n in 6" :key="n" class="sk-card glass">
-            <div class="sk-img" />
-            <div class="sk-line sk-w90" />
-            <div class="sk-line sk-w50" />
-          </div>
-        </div>
-
-        <div v-else-if="products.length === 0" class="empty-state glass">
-          <div class="empty-art" aria-hidden="true">
-            <svg viewBox="0 0 120 120" class="empty-svg" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color: #ca8a04; stop-opacity: 0.35" />
-                  <stop offset="100%" style="stop-color: #57534e; stop-opacity: 0.2" />
-                </linearGradient>
-              </defs>
-              <rect x="18" y="28" width="84" height="64" rx="4" fill="none" stroke="url(#g)" stroke-width="1.5" />
-              <path d="M38 48 L52 62 L82 36" fill="none" stroke="#ca8a04" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85" />
-              <circle cx="60" cy="96" r="3" fill="#78716c" opacity="0.6" />
-            </svg>
-          </div>
-          <p class="empty-title font-serif">暂无契合之选</p>
-          <p class="empty-desc">请尝试放宽筛选，或返回调整标签。</p>
-          <button type="button" class="cta-outline" @click="clearListFilters">清空筛选</button>
-        </div>
-
-        <template v-else>
-          <div class="grid">
-            <article
-              v-for="(p, idx) in products"
-              :key="p.id"
-              class="product-card glass"
-              data-imp-card="1"
-              :data-id="p.id"
-              :data-pos="idx"
-              @click="openDetail(p, idx)"
-            >
-              <div class="thumb-wrap">
-                <img :src="p.image" :alt="p.title" class="thumb" loading="lazy" decoding="async" />
-              </div>
-              <div class="info">
-                <h3 class="p-title">{{ p.title }}</h3>
-                <p class="p-price">¥{{ p.price }}</p>
-                <p v-if="p.reasons && p.reasons[0]" class="p-reason">{{ p.reasons[0].icon }} {{ p.reasons[0].text }}</p>
-              </div>
-            </article>
-          </div>
-          <div v-if="loadingMore" class="load-more-bar" aria-live="polite">加载更多…</div>
-          <div v-else-if="!hasMore && products.length > 0" class="load-more-end">已展示全部候选</div>
-        </template>
-
-        <footer class="browse-foot">匿名数据仅用于礼遇算法优化</footer>
-      </div>
-    </section>
-
-    <!-- 详情抽屉 -->
-    <div v-if="modalProduct" class="modal-mask" role="presentation" @click.self="closeDetail">
-      <div class="modal glass" role="dialog" aria-modal="true" aria-labelledby="detail-title">
-        <div class="modal-handle" aria-hidden="true" />
-        <button type="button" class="modal-close" aria-label="关闭" @click="closeDetail">×</button>
-        <div class="modal-carousel">
-          <button type="button" class="car-btn prev" aria-label="上一张" @click.stop="prevModalSlide">‹</button>
-          <div class="modal-hero">
-            <img
-              :src="modalImages(modalProduct)[modalSlideIndex]"
-              class="modal-img"
-              :alt="modalProduct.title + ' 图' + (modalSlideIndex + 1)"
-              loading="lazy"
-            />
-          </div>
-          <button type="button" class="car-btn next" aria-label="下一张" @click.stop="nextModalSlide">›</button>
-        </div>
-        <div v-if="modalImages(modalProduct).length > 1" class="car-dots">
-          <button
-            v-for="(_, i) in modalImages(modalProduct)"
-            :key="i"
-            type="button"
-            class="car-dot"
-            :class="{ on: i === modalSlideIndex }"
-            :aria-label="'第' + (i + 1) + '张'"
-            @click.stop="modalSlideIndex = i"
-          />
-        </div>
-        <p v-if="modalImages(modalProduct).length > 1" class="car-hint">左右滑动或点击箭头浏览多图</p>
-        <h3 id="detail-title" class="detail-name font-serif">{{ modalProduct.title }}</h3>
-        <p class="detail-price">¥{{ modalProduct.price }}</p>
-        <p class="detail-label">推荐理由</p>
-        <div class="reason-stack">
-          <div v-for="(r, i) in modalProduct.reasons" :key="i" class="reason-glass">
-            <span class="reason-ico" aria-hidden="true">{{ r.icon }}</span>
-            <span>{{ r.text }}</span>
-          </div>
-        </div>
-        <div v-if="relatedProducts.length" class="related-block">
-          <p class="related-label">类似礼遇</p>
-          <div class="related-strip">
-            <button
-              v-for="rp in relatedProducts"
-              :key="rp.id"
-              type="button"
-              class="related-card"
-              @click.stop="openRelatedFromModal(rp)"
-            >
-              <img :src="rp.image" class="related-thumb" :alt="rp.title" loading="lazy" />
-              <span class="related-name">{{ rp.title }}</span>
+        <div class="landing-center">
+          <p class="landing-eyebrow">Curated Gifting</p>
+          <h1 class="landing-title font-serif">知礼</h1>
+          <p class="landing-sub font-serif">懂礼更懂你</p>
+          <p class="landing-lead">
+            为重要的人甄选一份得体之礼。<br />以品味与场景为引，开启您的私人推荐。
+          </p>
+          <div class="landing-actions">
+            <button type="button" class="action-btn" @click="goToLogin">
+              <span class="action-icon">👤</span>
+              <span>登录</span>
+            </button>
+            <button type="button" class="action-btn" @click="goToRegister">
+              <span class="action-icon">✦</span>
+              <span>注册</span>
             </button>
           </div>
+          <button type="button" class="cta-explore" @click="goExplore">探索商品</button>
+          <p class="landing-hint">轻触即进入偏好标签，由算法为您呈献候选名录。</p>
         </div>
-        <div class="modal-actions">
-          <button type="button" class="btn-outline" @click="onCollect(modalProduct)">收藏</button>
-          <button type="button" class="cta-gold sm" @click="onPurchase(modalProduct)">去购买</button>
-        </div>
-        <p class="modal-legal">正式版将提示离开礼遇馆前往第三方完成交易</p>
-      </div>
+        <footer class="landing-foot">匿名礼遇数据 · 不采集姓名与电话</footer>
+      </section>
     </div>
 
-    <!-- 收藏列表弹窗 -->
-    <div v-if="favorites.length > 0" class="modal-mask" role="presentation" @click.self="favorites = []">
-      <div class="modal glass modal-favorites" role="dialog" aria-labelledby="favorites-title">
-        <div class="modal-handle" aria-hidden="true" />
-        <button type="button" class="modal-close" aria-label="关闭" @click="favorites = []">×</button>
-        <h3 id="favorites-title" class="font-serif">我的礼遇单</h3>
-        <div class="favorites-list">
-          <div v-if="favoritesLoading" class="loading-text">加载中…</div>
-          <div v-else-if="favorites.length === 0" class="empty-favorites">
-            <p>暂无收藏</p>
-          </div>
-          <div v-else>
-            <div v-for="f in favorites" :key="f.product_id" class="favorite-item">
-              <span class="favorite-name">{{ f.product_id }}</span>
-              <button type="button" class="btn-remove" @click="removeFavorite(f.product_id)">移除</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 画像弹窗 -->
-    <div v-if="showProfile" class="modal-mask" role="presentation" @click.self="showProfile = false">
-      <div class="modal glass modal-profile" role="dialog" aria-labelledby="profile-title">
-        <div class="modal-handle" aria-hidden="true" />
-        <button type="button" class="modal-close" aria-label="关闭" @click="showProfile = false">×</button>
-        <h3 id="profile-title" class="font-serif">我的画像</h3>
-        <div class="profile-content">
-          <div class="profile-row">
-            <span class="profile-label">用户分组</span>
-            <span class="profile-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">用户ID</span>
-            <span class="profile-value">{{ userId }}</span>
-          </div>
-          <div class="profile-divider" />
-          <div class="profile-row">
-            <span class="profile-label">收礼关系</span>
-            <span class="profile-value">{{ relationLabels[form.relation] || '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">年龄段</span>
-            <span class="profile-value">{{ form.ageBand || '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">性别</span>
-            <span class="profile-value">{{ form.gender === 'female' ? '女' : form.gender === 'male' ? '男' : '未知/通用' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">场合</span>
-            <span class="profile-value">{{ occasionLabels[form.occasion] || '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">预算</span>
-            <span class="profile-value">{{ budgetLabels[form.budget] || '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">风格</span>
-            <span class="profile-value">{{ styleLabels[form.style] || '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">兴趣圈层</span>
-            <span class="profile-value">{{ form.interests.length ? form.interests.map(i => interestOptions.find(o => o.v === i)?.l || i).join(', ') : '未设置' }}</span>
-          </div>
-          <div class="profile-row">
-            <span class="profile-label">禁忌</span>
-            <span class="profile-value">{{ form.taboos.length ? form.taboos.map(t => t === 'smell' ? '气味敏感' : t === 'religion' ? '宗教禁忌' : t).join(', ') : '无' }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    </main>
-
-    <!-- 4. 「我的」页面 -->
-    <section v-if="activeTab === 'profile'" class="profile-page">
-      <div class="profile-bg" aria-hidden="true" />
+    <div v-else>
+      <ProfilePage 
+        v-if="currentPage === 'profile'" 
+        @logout="handleLogout"
+        @back="goBackFromProfile"
+      />
       
-      <!-- 用户信息区 -->
-      <section class="profile-header glass">
-        <div class="avatar-wrap">
-          <div class="avatar">👤</div>
-          <button class="edit-btn" @click="showProfile = true">编辑资料</button>
-        </div>
-        <div class="user-info">
-          <h2 class="username font-serif">{{ group === 'A' ? '典藏组贵宾' : '策展组雅士' }}</h2>
-          <p class="user-group">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</p>
-          <p class="user-id">ID: {{ userId.slice(-8) }}</p>
-        </div>
-      </section>
-
-      <!-- 二级导航 -->
-      <section class="sub-nav glass">
-        <button 
-          class="sub-nav-item" 
-          :class="{ active: profileSubTab === 'favorites' }"
-          @click="profileSubTab = 'favorites'"
-        >
-          <span class="sub-nav-icon">♥</span>
-          <span class="sub-nav-text">我的收藏</span>
-          <span v-if="favorites.length > 0" class="sub-nav-badge">{{ favorites.length }}</span>
-        </button>
-        <button 
-          class="sub-nav-item" 
-          :class="{ active: profileSubTab === 'portrait' }"
-          @click="profileSubTab = 'portrait'"
-        >
-          <span class="sub-nav-icon">👤</span>
-          <span class="sub-nav-text">我的画像</span>
-        </button>
-      </section>
-
-      <!-- 二级导航内容区 -->
-      <section v-if="profileSubTab === 'favorites'" class="section glass">
-        <header class="section-header">
-          <h3 class="font-serif">我的礼遇单</h3>
-          <button class="link-ghost" @click="fetchFavorites">刷新</button>
-        </header>
-        <div v-if="favoritesLoading" class="loading-text">加载中…</div>
-        <div v-else-if="favorites.length === 0" class="empty-state-sm">
-          <p>暂无收藏，去逛逛吧</p>
-          <button type="button" class="cta-outline sm" @click="switchTab('browse')">去浏览</button>
-        </div>
-        <div v-else class="favorites-list">
-          <div v-for="item in favorites" :key="item.product_id" class="favorite-row glass">
-            <img :src="'https://img14.360buyimg.com/n1/jfs/t1/1/' + item.product_id + '/0.jpg'" class="favorite-thumb" />
-            <div class="favorite-info">
-              <span class="favorite-name">{{ item.product_id }}</span>
-              <span class="favorite-date">{{ formatDate(item.created_at) }}</span>
+      <div v-else>
+        <main>
+          <section v-if="phase === 'landing'" class="landing">
+            <div class="landing-bg" aria-hidden="true"></div>
+            <div class="landing-top">
+              <span class="pill-ab">{{ group === 'A' ? 'COLLECTION A' : 'ATELIER B' }}</span>
+              <span class="landing-refine">Ref. {{ userId.slice(-8) }}</span>
             </div>
-            <button class="favorite-remove" @click="removeFavorite(item.product_id)">移除</button>
-          </div>
-        </div>
-      </section>
+            <div class="landing-center">
+              <p class="landing-eyebrow">Curated Gifting</p>
+              <h1 class="landing-title font-serif">知礼</h1>
+              <p class="landing-sub font-serif">懂礼更懂你</p>
+              <p class="landing-lead">
+                为重要的人甄选一份得体之礼。<br />以品味与场景为引，开启您的私人推荐。
+              </p>
+              <button type="button" class="cta-explore" @click="goExplore">探索商品</button>
+              <p class="landing-hint">轻触即进入偏好标签，由算法为您呈献候选名录。</p>
+            </div>
+            <footer class="landing-foot">匿名礼遇数据 · 不采集姓名与电话</footer>
+          </section>
 
-      <!-- 画像详情 -->
-      <section v-else-if="profileSubTab === 'portrait'" class="section glass">
-        <header class="section-header">
-          <h3 class="font-serif">我的画像</h3>
-          <button class="link-ghost" @click="phase = 'tags'; switchTab('home')">修改偏好</button>
-        </header>
-        <div class="portrait-content">
-          <div class="portrait-row">
-            <span class="portrait-label">用户分组</span>
-            <span class="portrait-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">收礼关系</span>
-            <span class="portrait-value">{{ relationLabels[form.relation] || '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">年龄段</span>
-            <span class="portrait-value">{{ form.ageBand || '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">性别</span>
-            <span class="portrait-value">{{ form.gender === 'female' ? '女' : form.gender === 'male' ? '男' : '未知/通用' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">场合</span>
-            <span class="portrait-value">{{ occasionLabels[form.occasion] || '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">预算</span>
-            <span class="portrait-value">{{ budgetLabels[form.budget] || '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">风格</span>
-            <span class="portrait-value">{{ styleLabels[form.style] || '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">兴趣圈层</span>
-            <span class="portrait-value">{{ form.interests.length ? form.interests.map(i => interestOptions.find(o => o.v === i)?.l || i).join(', ') : '未设置' }}</span>
-          </div>
-          <div class="portrait-row">
-            <span class="portrait-label">禁忌</span>
-            <span class="portrait-value">{{ form.taboos.length ? form.taboos.map(t => t === 'smell' ? '气味敏感' : t === 'religion' ? '宗教禁忌' : t).join(', ') : '无' }}</span>
-          </div>
-        </div>
-      </section>
+          <section v-else-if="phase === 'tags'" class="tags-screen">
+            <header class="tags-head glass">
+              <button type="button" class="link-ghost" @click="backToHome">← 返回首页</button>
+              <h2 class="tags-title font-serif">偏好与场景</h2>
+              <p class="tags-sub">请选择收礼人标签，我们将据此匹配礼遇清单。</p>
+            </header>
 
-      <footer class="profile-foot">匿名礼遇数据 · 不采集姓名与电话</footer>
-    </section>
+            <main class="tags-body glass">
+              <label for="fld-relation" class="lx-label">关系</label>
+              <select id="fld-relation" v-model="form.relation" class="lx-input" autocomplete="off">
+                <option v-for="(l, k) in relationLabels" :key="k" :value="k">{{ l }}</option>
+              </select>
 
-    <!-- 底部导航栏 -->
-    <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
-      <button
-        type="button"
-        class="tab-item"
-        :class="{ active: activeTab === 'home' }"
-        @click="goToHome"
-        aria-label="首页"
-      >
-        <span class="tab-icon">🏠</span>
-        <span class="tab-text">首页</span>
-      </button>
-      <button
-        type="button"
-        class="tab-item"
-        :class="{ active: activeTab === 'browse' }"
-        @click="goToBrowse"
-        aria-label="浏览"
-      >
-        <span class="tab-icon">✨</span>
-        <span class="tab-text">礼遇</span>
-      </button>
-      <button
-        type="button"
-        class="tab-item"
-        :class="{ active: activeTab === 'profile' }"
-        @click="goToProfile"
-        aria-label="我的"
-      >
-        <span class="tab-icon">👤</span>
-        <span class="tab-text">我的</span>
-      </button>
-    </nav>
+              <label for="fld-age" class="lx-label">年龄段</label>
+              <select id="fld-age" v-model="form.ageBand" class="lx-input" autocomplete="off">
+                <option value="under18">&lt;18</option>
+                <option value="18-25">18–25</option>
+                <option value="26-35">26–35</option>
+                <option value="36-45">36–45</option>
+                <option value="46plus">46+</option>
+              </select>
+
+              <label for="fld-gender" class="lx-label">收礼人性别</label>
+              <select id="fld-gender" v-model="form.gender" class="lx-input" autocomplete="off">
+                <option value="unknown">未知 / 通用</option>
+                <option value="female">女</option>
+                <option value="male">男</option>
+              </select>
+
+              <label for="fld-occasion" class="lx-label">场合</label>
+              <select id="fld-occasion" v-model="form.occasion" class="lx-input" autocomplete="off">
+                <option value="birthday">生日</option>
+                <option value="anniversary">纪念日</option>
+                <option value="festival">节日</option>
+                <option value="thanks">感谢</option>
+                <option value="apology">道歉</option>
+                <option value="casual">无理由</option>
+              </select>
+
+              <label for="fld-budget" class="lx-label">预算</label>
+              <select id="fld-budget" v-model="form.budget" class="lx-input" autocomplete="off">
+                <option value="0-100">0–100</option>
+                <option value="100-300">100–300</option>
+                <option value="300-500">300–500</option>
+                <option value="500-1000">500–1000</option>
+                <option value="1000plus">1000+</option>
+              </select>
+
+              <label for="fld-style" class="lx-label">风格偏好</label>
+              <select id="fld-style" v-model="form.style" class="lx-input" autocomplete="off">
+                <option value="practical">实用主义</option>
+                <option value="creative">创意趣味</option>
+                <option value="luxury">品质奢华</option>
+                <option value="minimal">简约素雅</option>
+                <option value="cultural">文化艺术</option>
+              </select>
+
+              <label class="lx-label">兴趣圈层</label>
+              <div class="lx-chips">
+                <button 
+                  type="button" 
+                  v-for="opt in interestOptions" 
+                  :key="opt.v"
+                  class="lx-chip"
+                  :class="{ on: form.interests.includes(opt.v) }"
+                  @click="toggleInterest(opt.v)"
+                >{{ opt.l }}</button>
+              </div>
+
+              <label class="lx-label">禁忌偏好</label>
+              <div class="lx-chips">
+                <button type="button" class="lx-chip" :class="{ on: form.taboos.includes('smell') }" @click="toggleTaboo('smell')">气味敏感</button>
+                <button type="button" class="lx-chip" :class="{ on: form.taboos.includes('religion') }" @click="toggleTaboo('religion')">宗教禁忌</button>
+              </div>
+
+              <button type="button" class="cta-gold" :disabled="loading" @click="submitTags">
+                <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
+                {{ loading ? '正在遴选…' : '呈献推荐' }}
+              </button>
+            </main>
+          </section>
+
+          <section v-else-if="phase === 'browse'" class="browse-screen">
+            <header class="browse-head glass">
+              <button type="button" class="link-ghost" @click="backToTags">← 返回标签</button>
+              <button type="button" class="link-ghost" @click="showProfile = true">👤 我的画像</button>
+            </header>
+
+            <div class="filter-bar glass">
+              <p class="filter-eyebrow">筛选条件</p>
+              <div class="filter-row">
+                <span class="filter-label">场合:</span>
+                <select v-model="listFilters.occasion" class="filter-select">
+                  <option value="birthday">生日</option>
+                  <option value="anniversary">纪念日</option>
+                  <option value="festival">节日</option>
+                  <option value="thanks">感谢</option>
+                  <option value="apology">道歉</option>
+                  <option value="casual">无理由</option>
+                </select>
+              </div>
+              <div class="filter-row">
+                <span class="filter-label">预算:</span>
+                <select v-model="listFilters.budget" class="filter-select">
+                  <option value="0-100">0–100</option>
+                  <option value="100-300">100–300</option>
+                  <option value="300-500">300–500</option>
+                  <option value="500-1000">500–1000</option>
+                  <option value="1000plus">1000+</option>
+                </select>
+              </div>
+              <div class="filter-row">
+                <span class="filter-label">风格:</span>
+                <select v-model="listFilters.style" class="filter-select">
+                  <option value="practical">实用主义</option>
+                  <option value="creative">创意趣味</option>
+                  <option value="luxury">品质奢华</option>
+                  <option value="minimal">简约素雅</option>
+                  <option value="cultural">文化艺术</option>
+                </select>
+              </div>
+              <button type="button" class="filter-clear" @click="listFilters.occasion='birthday'; listFilters.budget='100-300'; listFilters.style='practical'">重置筛选</button>
+            </div>
+
+            <div 
+              ref="browseScrollRef"
+              class="browse-scroll"
+              @scroll="onBrowseScroll"
+              @touchstart="onPullStart"
+              @touchmove="onPullMove"
+              @touchend="onPullEnd"
+            >
+              <div class="pull-indicator" :style="{ height: pullDistance + 'px' }">
+                <span v-if="refreshing" class="pull-text">刷新中…</span>
+                <span v-else-if="pullDistance > 40" class="pull-text">松开刷新</span>
+                <span v-else-if="pullDistance > 0" class="pull-text">下拉刷新</span>
+              </div>
+
+              <div v-if="loading && products.length === 0" class="loading-text">加载中…</div>
+
+              <div v-else-if="products.length === 0" class="empty-state">
+                <p>暂无推荐礼遇</p>
+              </div>
+
+              <div v-else class="products-grid">
+                <article 
+                  v-for="(p, idx) in products" 
+                  :key="p.id"
+                  class="product-card glass"
+                  :data-imp-card="p.id"
+                  @click="openDetail(p, idx)"
+                >
+                  <div class="card-img-wrap">
+                    <img :src="p.image" :alt="p.title" class="card-img" loading="lazy" />
+                    <button 
+                      type="button" 
+                      class="card-collect" 
+                      @click.stop="onCollect(p)"
+                      aria-label="收藏"
+                    >♡</button>
+                  </div>
+                  <h3 class="card-title">{{ p.title }}</h3>
+                  <p class="card-price">¥{{ p.price }}</p>
+                  <p class="card-reason" v-if="p.reason">
+                    <span class="reason-glass">
+                      <span>✨</span>
+                      <span>{{ p.reason }}</span>
+                    </span>
+                  </p>
+                </article>
+              </div>
+
+              <div v-if="loadingMore" class="loading-text">加载更多…</div>
+              <div v-if="!hasMore && products.length > 0" class="loading-text">已加载全部</div>
+            </div>
+          </section>
+
+          <div v-if="modalProduct" class="modal-mask" role="presentation" @click.self="closeDetail">
+            <div class="modal glass" role="dialog" aria-labelledby="modal-title">
+              <div class="modal-handle" aria-hidden="true"></div>
+              <button type="button" class="modal-close" aria-label="关闭" @click="closeDetail">×</button>
+              
+              <div class="modal-images">
+                <button type="button" class="modal-prev" @click="prevModalSlide" aria-label="上一张">‹</button>
+                <img 
+                  :src="modalImages(modalProduct)[modalSlideIndex]" 
+                  :alt="modalProduct.title" 
+                  class="modal-img"
+                />
+                <button type="button" class="modal-next" @click="nextModalSlide" aria-label="下一张">›</button>
+                <div class="modal-indicators">
+                  <span 
+                    v-for="(_, i) in modalImages(modalProduct)" 
+                    :key="i"
+                    class="modal-indicator"
+                    :class="{ active: i === modalSlideIndex }"
+                  ></span>
+                </div>
+              </div>
+
+              <div class="modal-body">
+                <h2 id="modal-title" class="font-serif detail-name">{{ modalProduct.title }}</h2>
+                <p class="detail-price">¥{{ modalProduct.price }}</p>
+                <p class="detail-reason" v-if="modalProduct.reason">
+                  <span class="reason-glass">
+                    <span>✨</span>
+                    <span>{{ modalProduct.reason }}</span>
+                  </span>
+                </p>
+                <p class="detail-desc">{{ modalProduct.description }}</p>
+                
+                <div v-if="relatedProducts.length > 0" class="detail-related">
+                  <h3 class="related-title">相关礼遇</h3>
+                  <div class="related-list">
+                    <button 
+                      v-for="rp in relatedProducts.slice(0, 4)" 
+                      :key="rp.id"
+                      type="button"
+                      class="related-item"
+                      @click="openRelatedFromModal(rp)"
+                    >
+                      <img :src="rp.image" class="related-thumb" :alt="rp.title" loading="lazy" />
+                      <span class="related-name">{{ rp.title }}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div class="modal-actions">
+                  <button type="button" class="btn-outline" @click="onCollect(modalProduct)">♡ 收藏</button>
+                  <button type="button" class="btn-primary" @click="onPurchase(modalProduct)">礼遇呈献</button>
+                </div>
+                <p class="modal-legal">正式版将提示离开礼遇馆前往第三方完成交易</p>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="favorites.length > 0" class="modal-mask" role="presentation" @click.self="favorites = []">
+            <div class="modal glass modal-favorites" role="dialog" aria-labelledby="favorites-title">
+              <div class="modal-handle" aria-hidden="true"></div>
+              <button type="button" class="modal-close" aria-label="关闭" @click="favorites = []">×</button>
+              <h3 id="favorites-title" class="font-serif">我的礼遇单</h3>
+              <div class="favorites-list">
+                <div v-if="favoritesLoading" class="loading-text">加载中…</div>
+                <div v-else-if="favorites.length === 0" class="empty-favorites">
+                  <p>暂无收藏</p>
+                </div>
+                <div v-else>
+                  <div v-for="f in favorites" :key="f.product_id" class="favorite-item">
+                    <span class="favorite-name">{{ f.product_id }}</span>
+                    <button type="button" class="btn-remove" @click="removeFavorite(f.product_id)">移除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="showProfile" class="modal-mask" role="presentation" @click.self="showProfile = false">
+            <div class="modal glass modal-profile" role="dialog" aria-labelledby="profile-title">
+              <div class="modal-handle" aria-hidden="true"></div>
+              <button type="button" class="modal-close" aria-label="关闭" @click="showProfile = false">×</button>
+              <h3 id="profile-title" class="font-serif">我的画像</h3>
+              <div class="profile-content">
+                <div class="profile-row">
+                  <span class="profile-label">用户分组</span>
+                  <span class="profile-value">{{ group === 'A' ? '典藏组 (A)' : '策展组 (B)' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">用户ID</span>
+                  <span class="profile-value">{{ userId }}</span>
+                </div>
+                <div class="profile-divider"></div>
+                <div class="profile-row">
+                  <span class="profile-label">收礼关系</span>
+                  <span class="profile-value">{{ relationLabels[form.relation] || '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">年龄段</span>
+                  <span class="profile-value">{{ form.ageBand || '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">性别</span>
+                  <span class="profile-value">{{ form.gender === 'female' ? '女' : form.gender === 'male' ? '男' : '未知/通用' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">场合</span>
+                  <span class="profile-value">{{ form.occasion || '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">预算</span>
+                  <span class="profile-value">{{ form.budget || '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">风格</span>
+                  <span class="profile-value">{{ form.style || '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">兴趣圈层</span>
+                  <span class="profile-value">{{ form.interests.length ? form.interests.map(i => interestOptions.find(o => o.v === i)?.l || i).join(', ') : '未设置' }}</span>
+                </div>
+                <div class="profile-row">
+                  <span class="profile-label">禁忌</span>
+                  <span class="profile-value">{{ form.taboos.length ? form.taboos.map(t => t === 'smell' ? '气味敏感' : t === 'religion' ? '宗教禁忌' : t).join(', ') : '无' }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
+          <button
+            type="button"
+            class="tab-item"
+            :class="{ active: activeTab === 'home' }"
+            @click="goToHome"
+            aria-label="首页"
+          >
+            <span class="tab-icon">🏠</span>
+            <span class="tab-text">首页</span>
+          </button>
+          <button
+            type="button"
+            class="tab-item"
+            :class="{ active: activeTab === 'browse' }"
+            @click="goToBrowse"
+            aria-label="浏览"
+          >
+            <span class="tab-icon">✨</span>
+            <span class="tab-text">礼遇</span>
+          </button>
+          <button
+            type="button"
+            class="tab-item"
+            :class="{ active: activeTab === 'profile' }"
+            @click="goToProfile"
+            aria-label="我的"
+          >
+            <span class="tab-icon">👤</span>
+            <span class="tab-text">我的</span>
+          </button>
+        </nav>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -994,6 +908,11 @@ onUnmounted(() => {
   color: #fafaf9;
 }
 
+.glass {
+  background: rgba(28, 25, 23, 0.55);
+  backdrop-filter: blur(18px);
+}
+
 .toast {
   position: fixed;
   top: 14px;
@@ -1009,1171 +928,754 @@ onUnmounted(() => {
   letter-spacing: 0.04em;
 }
 
-.glass {
-  background: rgba(28, 25, 23, 0.55);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
-}
-
-/* —— Landing —— */
 .landing {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  padding: 20px 20px 24px;
+  align-items: center;
+  padding: 24px;
+  box-sizing: border-box;
 }
+
 .landing-bg {
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 120% 80% at 50% -20%, rgba(202, 138, 4, 0.18), transparent 55%),
-    radial-gradient(ellipse 80% 50% at 100% 60%, rgba(202, 138, 4, 0.06), transparent 45%),
-    linear-gradient(180deg, #1c1917 0%, #0c0a09 55%);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 320px;
+  background: linear-gradient(180deg, rgba(202, 138, 4, 0.08) 0%, transparent 100%);
   pointer-events: none;
 }
+
 .landing-top {
-  position: relative;
-  z-index: 1;
+  width: 100%;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: #a8a29e;
+  padding: 8px 0;
 }
+
 .pill-ab {
-  border: 1px solid rgba(202, 138, 4, 0.45);
-  color: #eab308;
-  padding: 6px 12px;
+  padding: 4px 10px;
+  background: rgba(202, 138, 4, 0.15);
   border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: #ca8a04;
 }
+
 .landing-refine {
-  opacity: 0.75;
+  font-size: 10px;
+  color: #78716c;
+  letter-spacing: 0.08em;
 }
+
 .landing-center {
-  position: relative;
-  z-index: 1;
   flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   text-align: center;
-  padding: 24px 8px 32px;
 }
+
 .landing-eyebrow {
   margin: 0 0 12px;
   font-size: 11px;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  color: #ca8a04;
+  letter-spacing: 0.3em;
+  color: #78716c;
 }
+
 .landing-title {
-  margin: 0;
-  font-size: clamp(3rem, 14vw, 4.5rem);
-  font-weight: 500;
-  letter-spacing: 0.2em;
-  line-height: 1.05;
-}
-.landing-sub {
-  margin: 8px 0 0;
-  font-size: clamp(1.25rem, 5vw, 1.65rem);
+  margin: 0 0 8px;
+  font-size: 4rem;
   font-weight: 400;
-  color: #d6d3d1;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.15em;
 }
-.landing-lead {
-  margin: 28px 0 0;
-  max-width: 300px;
-  font-size: 14px;
+
+.landing-sub {
+  margin: 0 0 24px;
+  font-size: 1.25rem;
   font-weight: 300;
-  line-height: 1.75;
+  letter-spacing: 0.2em;
   color: #a8a29e;
 }
-.cta-explore {
-  margin-top: 40px;
-  padding: 16px 48px;
-  font-family: 'Montserrat', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: #fafaf9;
-  background: transparent;
-  border: 1px solid #ca8a04;
-  border-radius: 0;
-  cursor: pointer;
-  transition:
-    background 0.35s ease,
-    color 0.35s ease,
-    box-shadow 0.35s ease;
+
+.landing-lead {
+  margin: 0 0 32px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #a8a29e;
 }
-.cta-explore:hover {
-  background: rgba(202, 138, 4, 0.15);
-  box-shadow: 0 0 40px rgba(202, 138, 4, 0.12);
-}
-.landing-hint {
-  margin-top: 20px;
-  font-size: 11px;
-  color: #78716c;
-  max-width: 260px;
-  line-height: 1.6;
-}
-.landing-foot {
-  position: relative;
-  z-index: 1;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: #57534e;
-}
+
 .landing-actions {
-  position: relative;
-  z-index: 1;
   display: flex;
   gap: 12px;
-  justify-content: center;
-  margin-top: 16px;
+  margin-bottom: 20px;
 }
+
 .action-btn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
-  background: rgba(28, 25, 23, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  color: #a8a29e;
+  color: #fafaf9;
   font-size: 13px;
+  letter-spacing: 0.04em;
   cursor: pointer;
   transition: all 0.3s ease;
 }
+
 .action-btn:hover {
-  border-color: rgba(202, 138, 4, 0.4);
-  color: #fafaf9;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
 }
+
 .action-icon {
   font-size: 16px;
 }
-.action-badge {
-  background: #ca8a04;
-  color: #0c0a09;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 999px;
-}
 
-/* —— Tags —— */
-.tags-screen {
-  padding: 16px 16px 100px;
-}
-.tags-head {
-  padding: 18px 18px 14px;
-  border-radius: 2px;
-  margin-bottom: 14px;
-}
-.link-ghost {
-  background: none;
+.cta-explore {
+  padding: 14px 48px;
+  background: linear-gradient(135deg, #ca8a04 0%, #a16207 100%);
   border: none;
-  color: #a8a29e;
-  font-size: 12px;
+  border-radius: 999px;
+  color: #1c1917;
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   cursor: pointer;
-  padding: 0 0 12px;
+  transition: all 0.3s ease;
 }
-.link-ghost:hover {
-  color: #eab308;
+
+.cta-explore:hover {
+  transform: scale(1.02);
+  box-shadow: 0 4px 20px rgba(202, 138, 4, 0.35);
 }
+
+.landing-hint {
+  margin: 24px 0 0;
+  font-size: 11px;
+  color: #78716c;
+}
+
+.landing-foot {
+  padding: 16px 0;
+  font-size: 10px;
+  color: #57534e;
+  letter-spacing: 0.06em;
+}
+
+.tags-screen {
+  min-height: 100vh;
+  padding-bottom: 60px;
+}
+
+.tags-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 14px 16px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 .tags-title {
-  margin: 0;
-  font-size: 1.75rem;
+  margin: 8px 0 4px;
+  font-size: 1.25rem;
   font-weight: 500;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
+
 .tags-sub {
-  margin: 10px 0 0;
-  font-size: 13px;
-  font-weight: 300;
+  margin: 0;
+  font-size: 12px;
   color: #a8a29e;
-  line-height: 1.55;
 }
+
 .tags-body {
-  padding: 22px 18px 28px;
+  margin: 12px;
+  padding: 16px;
   border-radius: 2px;
 }
+
 .lx-label {
   display: block;
-  margin-top: 18px;
-  font-size: 10px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  margin: 16px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
   color: #a8a29e;
 }
-.lx-label:first-of-type {
-  margin-top: 0;
-}
+
 .lx-input {
   width: 100%;
-  margin-top: 8px;
-  padding: 12px 14px;
-  font-family: inherit;
-  font-size: 14px;
-  color: #fafaf9;
-  background: rgba(12, 10, 9, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px;
+  background: rgba(12, 10, 9, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 2px;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23a8a29e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 36px;
-}
-.lx-input.sm {
-  padding-top: 10px;
-  padding-bottom: 10px;
+  color: #fafaf9;
   font-size: 13px;
+  cursor: pointer;
 }
+
+.lx-input:focus {
+  outline: none;
+  border-color: rgba(202, 138, 4, 0.5);
+}
+
 .lx-chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 12px;
-}
-.lx-chip {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(12, 10, 9, 0.4);
-  color: #d6d3d1;
-  border-radius: 999px;
-  padding: 9px 16px;
-  font-size: 12px;
-  cursor: pointer;
-  transition:
-    border-color 0.2s ease,
-    color 0.2s ease,
-    background 0.2s ease;
-}
-.lx-chip.on {
-  border-color: #ca8a04;
-  color: #fef3c7;
-  background: rgba(202, 138, 4, 0.12);
-}
-.cta-gold {
-  width: 100%;
-  margin-top: 28px;
-  min-height: 52px;
-  border: none;
-  border-radius: 2px;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: #1c1917;
-  background: linear-gradient(105deg, #eab308 0%, #ca8a04 45%, #a16207 100%);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  box-shadow: 0 12px 40px rgba(202, 138, 4, 0.22);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.cta-gold:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 16px 48px rgba(202, 138, 4, 0.28);
-}
-.cta-gold:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-.cta-gold.sm {
-  margin-top: 0;
-  min-height: 48px;
-  flex: 1;
-}
-.btn-spinner {
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(28, 25, 23, 0.25);
-  border-top-color: #1c1917;
-  border-radius: 50%;
-  animation: spin 0.65s linear infinite;
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  gap: 8px;
 }
 
-/* —— Browse —— */
-.browse-screen {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  max-height: 100vh;
-  padding: 16px 0 0;
-  box-sizing: border-box;
+.lx-chip {
+  padding: 8px 14px;
+  background: rgba(12, 10, 9, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #a8a29e;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
-.browse-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
-  padding: 0 16px 80px;
-  touch-action: pan-y;
-}
-.pull-indicator {
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  overflow: hidden;
-  transition: height 0.12s ease-out;
+
+.lx-chip.on {
+  background: rgba(202, 138, 4, 0.15);
+  border-color: rgba(202, 138, 4, 0.4);
   color: #ca8a04;
-  font-size: 11px;
-  letter-spacing: 0.15em;
 }
-.pull-text {
-  padding-bottom: 6px;
-}
-.load-more-bar,
-.load-more-end {
-  text-align: center;
-  font-size: 11px;
-  color: #78716c;
-  letter-spacing: 0.12em;
-  padding: 16px 0 8px;
-}
-.browse-head {
-  padding: 16px 18px;
+
+.cta-gold {
+  width: 100%;
+  margin-top: 24px;
+  padding: 14px;
+  background: linear-gradient(135deg, #ca8a04 0%, #a16207 100%);
+  border: none;
   border-radius: 2px;
-  margin: 0 16px 12px;
-  flex-shrink: 0;
-}
-.browse-title {
-  margin: 8px 0 0;
-  font-size: 1.6rem;
+  color: #1c1917;
+  font-size: 14px;
   font-weight: 500;
-  letter-spacing: 0.15em;
+  letter-spacing: 0.08em;
+  cursor: pointer;
 }
-.browse-meta {
-  margin: 8px 0 0;
-  font-size: 11px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+
+.cta-gold:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #1c1917;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.link-ghost {
+  background: none;
+  border: none;
   color: #ca8a04;
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
 }
-.filter-bar {
+
+.browse-screen {
+  min-height: 100vh;
+  padding-bottom: 80px;
+}
+
+.browse-head {
   position: sticky;
-  top: 8px;
-  z-index: 5;
-  padding: 14px 16px 16px;
-  border-radius: 2px;
-  margin-bottom: 14px;
+  top: 0;
+  z-index: 10;
+  padding: 14px 16px;
+  border-radius: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
+
+.filter-bar {
+  margin: 12px;
+  padding: 14px;
+  border-radius: 2px;
+}
+
 .filter-eyebrow {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   font-size: 10px;
-  letter-spacing: 0.25em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
   color: #78716c;
 }
+
 .filter-row {
   display: flex;
   align-items: center;
   gap: 10px;
   margin-bottom: 10px;
 }
+
 .filter-label {
-  flex: 0 0 36px;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 11px;
+  letter-spacing: 0.1em;
   color: #a8a29e;
 }
+
+.filter-select {
+  padding: 6px 10px;
+  background: rgba(12, 10, 9, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  color: #fafaf9;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .filter-clear {
   width: 100%;
-  margin-top: 4px;
+  padding: 10px;
+  background: rgba(12, 10, 9, 0.4);
   border: none;
-  background: none;
-  color: #ca8a04;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  text-align: right;
-  cursor: pointer;
-}
-
-.skeleton-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.sk-card {
   border-radius: 2px;
-  padding-bottom: 12px;
-  overflow: hidden;
-}
-.sk-img {
-  aspect-ratio: 1;
-  background: linear-gradient(110deg, #292524 0%, #44403c 40%, #292524 80%);
-  background-size: 200% 100%;
-  animation: sk 1.2s ease-in-out infinite;
-}
-.sk-line {
-  height: 8px;
-  margin: 10px 12px 0;
-  border-radius: 1px;
-  background: #44403c;
-  animation: sk 1.2s ease-in-out infinite;
-}
-.sk-w90 {
-  width: 88%;
-}
-.sk-w50 {
-  width: 50%;
-}
-@keyframes sk {
-  0% {
-    background-position: 100% 0;
-  }
-  100% {
-    background-position: -100% 0;
-  }
-}
-
-.empty-state {
-  text-align: center;
-  padding: 36px 20px;
-  border-radius: 2px;
-}
-.empty-art {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-.empty-svg {
-  width: 120px;
-  height: 120px;
-  opacity: 0.95;
-}
-.empty-title {
-  margin: 0;
-  font-size: 1.4rem;
-}
-.empty-desc {
-  margin: 12px 0 20px;
-  font-size: 13px;
   color: #a8a29e;
-}
-.cta-outline {
-  padding: 12px 28px;
-  font-size: 11px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  color: #fafaf9;
-  background: transparent;
-  border: 1px solid rgba(202, 138, 4, 0.5);
-  cursor: pointer;
-}
-
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 10px;
-}
-.product-card {
-  border-radius: 2px;
-  overflow: hidden;
-  cursor: pointer;
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-.product-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
-}
-.thumb-wrap {
-  position: relative;
-  aspect-ratio: 1;
-  overflow: hidden;
-}
-.thumb {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.5s ease;
-}
-.product-card:hover .thumb {
-  transform: scale(1.04);
-}
-.info {
-  padding: 12px 12px 14px;
-}
-.p-title {
-  margin: 0;
   font-size: 12px;
-  font-weight: 500;
-  line-height: 1.45;
-  color: #e7e5e4;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.p-price {
-  margin: 8px 0 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: #eab308;
-  letter-spacing: 0.06em;
-}
-.p-reason {
-  margin: 8px 0 0;
-  font-size: 10px;
-  line-height: 1.4;
-  color: #78716c;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.browse-foot {
-  margin-top: 28px;
-  text-align: center;
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  color: #57534e;
+  cursor: pointer;
 }
 
-/* —— Modal —— */
-.modal-mask {
-  position: fixed;
-  inset: 0;
-  background: rgba(12, 10, 9, 0.72);
+.browse-scroll {
+  position: relative;
+}
+
+.pull-indicator {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  z-index: 100;
-  backdrop-filter: blur(6px);
-}
-.modal {
-  position: relative;
-  width: 100%;
-  max-width: 520px;
-  max-height: 92vh;
-  overflow-y: auto;
-  border-radius: 2px 2px 0 0;
-  padding-bottom: 28px;
-  animation: up 0.35s cubic-bezier(0.22, 1, 0.36, 1);
-}
-@keyframes up {
-  from {
-    transform: translateY(24px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-.modal-handle {
-  width: 40px;
-  height: 3px;
-  background: #57534e;
-  margin: 12px auto 8px;
-  border-radius: 2px;
-}
-.modal-carousel {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-  gap: 0;
-}
-.modal-carousel .modal-hero {
-  width: 100%;
-  margin: 0;
-}
-.car-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 2;
-  width: 36px;
-  height: 48px;
-  border: none;
-  background: rgba(12, 10, 9, 0.45);
-  color: #fafaf9;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 2px;
-}
-.car-btn.prev {
-  left: 8px;
-}
-.car-btn.next {
-  right: 8px;
-}
-.car-dots {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 0 0;
-}
-.car-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: none;
-  padding: 0;
-  background: #44403c;
-  cursor: pointer;
-}
-.car-dot.on {
-  background: #eab308;
-}
-.car-hint {
-  margin: 4px 20px 0;
-  font-size: 10px;
-  color: #57534e;
-  text-align: center;
-  letter-spacing: 0.08em;
-}
-.related-block {
-  margin: 20px 0 0;
-  padding: 0 12px;
-}
-.related-label {
-  margin: 0 0 10px 8px;
-  font-size: 10px;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: #78716c;
-}
-.related-strip {
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  padding-bottom: 6px;
-  -webkit-overflow-scrolling: touch;
-  scroll-snap-type: x proximity;
-}
-.related-card {
-  flex: 0 0 88px;
-  scroll-snap-align: start;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(12, 10, 9, 0.5);
-  border-radius: 2px;
-  padding: 0;
-  cursor: pointer;
-  text-align: left;
-  color: #d6d3d1;
-}
-.related-thumb {
-  width: 100%;
-  aspect-ratio: 1;
-  object-fit: cover;
-  display: block;
-}
-.related-name {
-  display: block;
-  font-size: 9px;
-  line-height: 1.35;
-  padding: 6px 6px 8px;
-  max-height: 2.8em;
-  overflow: hidden;
-}
-.modal-close {
-  position: absolute;
-  right: 14px;
-  top: 16px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(12, 10, 9, 0.6);
-  color: #fafaf9;
-  font-size: 22px;
-  line-height: 1;
-  cursor: pointer;
-}
-.modal-hero {
-  margin: 0 0 4px;
-  max-height: 280px;
-  overflow: hidden;
-}
-.modal-img {
-  width: 100%;
-  height: 100%;
-  max-height: 280px;
-  object-fit: cover;
-  display: block;
-}
-.detail-name {
-  margin: 16px 20px 0;
-  font-size: 1.5rem;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-}
-.detail-price {
-  margin: 6px 20px 0;
-  font-size: 1.35rem;
-  color: #eab308;
-  font-weight: 600;
-}
-.detail-label {
-  margin: 20px 20px 10px;
-  font-size: 10px;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
-  color: #78716c;
-}
-.reason-stack {
-  padding: 0 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.reason-glass {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 14px 14px;
-  border: 1px solid rgba(202, 138, 4, 0.15);
-  background: rgba(202, 138, 4, 0.06);
-  border-radius: 2px;
-  font-size: 13px;
-  line-height: 1.5;
-  color: #d6d3d1;
-}
-.reason-ico {
-  flex-shrink: 0;
-}
-.modal-actions {
-  display: flex;
-  gap: 12px;
-  margin: 24px 20px 0;
-}
-.btn-outline {
-  flex: 1;
-  min-height: 48px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  color: #fafaf9;
-  font-size: 11px;
-  letter-spacing: 0.15em;
-  text-transform: uppercase;
-  cursor: pointer;
-  border-radius: 2px;
-}
-.modal-legal {
-  margin: 16px 20px 0;
-  font-size: 10px;
-  color: #57534e;
-  text-align: center;
-  line-height: 1.5;
+  transition: height 0.15s ease;
 }
 
-/* —— Favorites Modal —— */
-.modal-favorites {
-  max-height: 70vh;
-}
-.favorites-list {
-  padding: 0 20px;
-  max-height: 400px;
-  overflow-y: auto;
-}
-.favorite-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-.favorite-item:last-child {
-  border-bottom: none;
-}
-.favorite-name {
-  font-size: 14px;
-  color: #e7e5e4;
-}
-.btn-remove {
-  padding: 6px 14px;
-  background: rgba(185, 28, 28, 0.2);
-  border: 1px solid rgba(185, 28, 28, 0.3);
-  color: #fca5a5;
+.pull-text {
   font-size: 12px;
-  border-radius: 999px;
-  cursor: pointer;
+  color: #a8a29e;
 }
-.empty-favorites {
-  text-align: center;
-  padding: 40px 0;
-  color: #78716c;
-}
+
 .loading-text {
+  padding: 24px;
   text-align: center;
-  padding: 20px;
+  font-size: 13px;
   color: #a8a29e;
 }
 
-/* —— Profile Modal —— */
-.modal-profile {
-  max-height: 85vh;
-}
-.profile-content {
-  padding: 0 20px;
-}
-.profile-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 0;
-}
-.profile-label {
-  font-size: 12px;
-  color: #a8a29e;
-  letter-spacing: 0.1em;
-}
-.profile-value {
-  font-size: 14px;
-  color: #fafaf9;
-  font-weight: 500;
-}
-.profile-divider {
-  height: 1px;
-  background: rgba(202, 138, 4, 0.2);
-  margin: 8px 0;
+.empty-state {
+  padding: 60px 24px;
+  text-align: center;
 }
 
-/* —— Profile Page —— */
-.profile-page {
-  min-height: 100vh;
-  padding-bottom: 80px;
-  background: linear-gradient(180deg, #1c1917 0%, #0c0a09 100%);
-}
-.profile-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 200px;
-  background: linear-gradient(180deg, rgba(202, 138, 4, 0.15) 0%, transparent 100%);
-}
-.profile-header {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 40px 20px 20px;
-  margin: 0 12px 12px;
-  border-radius: 12px;
-}
-.avatar-wrap {
-  position: relative;
-}
-.avatar {
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #ca8a04 0%, #78716c 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 36px;
-}
-.edit-btn {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  padding: 4px 10px;
-  background: rgba(202, 138, 4, 0.2);
-  border: 1px solid rgba(202, 138, 4, 0.4);
-  color: #fbbf24;
-  font-size: 10px;
-  border-radius: 999px;
-}
-.user-info {
-  flex: 1;
-}
-.username {
-  font-size: 18px;
-  color: #fafaf9;
-  margin: 0 0 4px;
-}
-.user-group {
-  font-size: 11px;
-  color: #ca8a04;
-  letter-spacing: 0.1em;
-  margin: 0 0 4px;
-}
-.user-id {
-  font-size: 10px;
-  color: #78716c;
+.empty-state p {
   margin: 0;
-}
-
-/* —— Sub Navigation —— */
-.sub-nav {
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  margin: 0 12px 12px;
-  border-radius: 12px;
-}
-.sub-nav-item {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 8px;
-  color: #78716c;
-  transition: all 0.2s;
-}
-.sub-nav-item.active {
-  background: rgba(202, 138, 4, 0.15);
-  border-color: rgba(202, 138, 4, 0.3);
-  color: #ca8a04;
-}
-.sub-nav-icon {
-  font-size: 18px;
-}
-.sub-nav-text {
   font-size: 14px;
-  font-weight: 500;
-}
-.sub-nav-badge {
-  padding: 2px 8px;
-  background: #dc2626;
-  color: white;
-  font-size: 10px;
-  border-radius: 999px;
+  color: #78716c;
 }
 
-/* —— Quick Actions —— */
-.quick-actions {
+.products-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
   padding: 0 12px;
-  margin-bottom: 12px;
 }
-.action-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 16px 8px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+
+.product-card {
+  padding: 12px;
+  border-radius: 2px;
+  cursor: pointer;
 }
-.action-card .action-icon {
-  font-size: 24px;
+
+.card-img-wrap {
+  position: relative;
+  margin-bottom: 10px;
 }
-.action-card .action-text {
-  font-size: 12px;
-  color: #e7e5e4;
+
+.card-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 2px;
 }
-.action-card .action-badge {
+
+.card-collect {
   position: absolute;
   top: 8px;
   right: 8px;
-  padding: 2px 8px;
-  background: #dc2626;
-  color: white;
-  font-size: 10px;
-  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  background: rgba(12, 10, 9, 0.7);
+  border: none;
+  border-radius: 50%;
+  color: #a8a29e;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.section {
-  margin: 0 12px 12px;
-  padding: 16px;
-  border-radius: 12px;
+.card-title {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
 }
-.section-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+
+.card-price {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #ca8a04;
 }
-.section-header h3 {
-  font-size: 16px;
-  color: #fafaf9;
+
+.card-reason {
   margin: 0;
 }
 
-.fav-preview {
-  display: flex;
-  gap: 12px;
-  overflow-x: auto;
-}
-.fav-item {
-  flex-shrink: 0;
-  width: 80px;
-  text-align: center;
-}
-.fav-thumb {
-  width: 80px;
-  height: 80px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.fav-name {
-  font-size: 11px;
-  color: #a8a29e;
-}
-
-.preferences {
-  display: flex;
-  gap: 16px;
-}
-.pref-item {
-  flex: 1;
-  text-align: center;
-}
-.pref-label {
-  display: block;
-  font-size: 10px;
-  color: #78716c;
-  margin-bottom: 4px;
-}
-.pref-value {
-  font-size: 13px;
-  color: #e7e5e4;
-}
-
-/* —— Favorites List —— */
-.favorites-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.favorite-row {
+.reason-glass {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
-  border-radius: 8px;
-}
-.favorite-thumb {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
-}
-.favorite-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.favorite-name {
-  font-size: 14px;
-  color: #fafaf9;
-}
-.favorite-date {
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(202, 138, 4, 0.1);
+  border-radius: 999px;
   font-size: 11px;
-  color: #78716c;
+  color: #ca8a04;
+  display: inline-flex;
 }
-.favorite-remove {
-  padding: 8px 14px;
-  background: rgba(185, 28, 28, 0.2);
-  border: 1px solid rgba(185, 28, 28, 0.3);
-  color: #fca5a5;
-  font-size: 12px;
+
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  z-index: 100;
+  display: flex;
+  align-items: flex-end;
+}
+
+.modal {
+  width: 100%;
+  max-width: 520px;
+  max-height: 90vh;
+  margin: 0 auto;
+  background: #1c1917;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+}
+
+.modal-handle {
+  width: 48px;
+  height: 6px;
+  margin: 12px auto 0;
+  background: rgba(255, 255, 255, 0.15);
   border-radius: 999px;
 }
 
-/* —— Portrait Content —— */
-.portrait-content {
-  padding: 0;
+.modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: #a8a29e;
+  font-size: 18px;
+  cursor: pointer;
 }
-.portrait-row {
+
+.modal-images {
+  position: relative;
+  height: 320px;
+  background: #0c0a09;
+}
+
+.modal-prev,
+.modal-next {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  background: rgba(12, 10, 9, 0.7);
+  border: none;
+  border-radius: 50%;
+  color: #fafaf9;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.modal-prev {
+  left: 12px;
+}
+
+.modal-next {
+  right: 12px;
+}
+
+.modal-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.modal-indicators {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  justify-content: space-between;
+  gap: 6px;
+}
+
+.modal-indicator {
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+}
+
+.modal-indicator.active {
+  background: #ca8a04;
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.detail-name {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.detail-price {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: #ca8a04;
+}
+
+.detail-reason {
+  margin: 0 0 16px;
+}
+
+.detail-desc {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #a8a29e;
+}
+
+.detail-related {
+  margin-bottom: 20px;
+}
+
+.related-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  color: #a8a29e;
+}
+
+.related-list {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.related-item {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.related-thumb {
+  width: 100%;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 2px;
+}
+
+.related-name {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-outline {
+  flex: 1;
+  padding: 14px;
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  color: #fafaf9;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  flex: 2;
+  padding: 14px;
+  background: linear-gradient(135deg, #ca8a04 0%, #a16207 100%);
+  border: none;
+  border-radius: 2px;
+  color: #1c1917;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.modal-legal {
+  margin: 16px 0 0;
+  font-size: 11px;
+  color: #57534e;
+  text-align: center;
+}
+
+.modal-favorites {
+  max-height: 60vh;
+}
+
+.favorites-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.favorite-item {
+  display: flex;
   align-items: center;
-  padding: 12px 0;
+  justify-content: space-between;
+  padding: 12px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.portrait-row:last-child {
+
+.favorite-item:last-child {
   border-bottom: none;
 }
-.portrait-label {
+
+.favorite-name {
+  font-size: 13px;
+}
+
+.btn-remove {
+  padding: 6px 12px;
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 2px;
+  color: #dc2626;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.modal-profile {
+  max-height: 70vh;
+}
+
+.profile-content {
+  padding-top: 8px;
+}
+
+.profile-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+}
+
+.profile-label {
   font-size: 12px;
   color: #a8a29e;
-  letter-spacing: 0.05em;
-}
-.portrait-value {
-  font-size: 14px;
-  color: #fafaf9;
-  font-weight: 500;
 }
 
-.empty-state-sm {
-  text-align: center;
-  padding: 20px 0;
-}
-.empty-state-sm p {
-  color: #78716c;
-  margin: 0 0 12px;
+.profile-value {
+  font-size: 12px;
 }
 
-.profile-foot {
-  text-align: center;
-  padding: 20px;
-  font-size: 10px;
-  color: #57534e;
+.profile-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin: 8px 0;
 }
 
-/* —— Tab Bar —— */
 .tab-bar {
   position: fixed;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  max-width: 520px;
-  width: 100%;
+  z-index: 50;
   display: flex;
-  justify-content: space-around;
-  padding: 8px 0;
-  background: rgba(12, 10, 9, 0.95);
+  width: 100%;
+  max-width: 520px;
+  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+  border-radius: 0;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
-  backdrop-filter: blur(20px);
-  z-index: 100;
+  box-sizing: border-box;
 }
+
 .tab-bar.hidden {
   display: none;
 }
+
 .tab-item {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 8px 20px;
+  padding: 8px 0;
+  margin: 0;
   background: none;
   border: none;
   color: #78716c;
+  cursor: pointer;
+  transition: color 0.3s ease;
+  min-height: 48px;
 }
+
 .tab-item.active {
   color: #ca8a04;
 }
+
 .tab-icon {
   font-size: 20px;
+  line-height: 1;
 }
+
 .tab-text {
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
 }
 </style>

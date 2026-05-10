@@ -1,7 +1,8 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { getPool, query, execute } from '../db.js';
 import { exchangeJsCode } from '../lib/wechat.js';
-import { signUserToken } from '../lib/jwt.js';
+import { signUserToken, verifyToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rowToApiProfile } from '../lib/profileSchema.js';
 import { productsData } from '../productsData.js';
@@ -41,6 +42,10 @@ function loginRateLimit(req, res, next) {
   next();
 }
 
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password + process.env.PASSWORD_SALT).digest('hex');
+}
+
 async function upsertUser(openid, anonId) {
   const anon = anonId && String(anonId).trim() ? String(anonId).trim() : null;
   await execute(
@@ -60,18 +65,117 @@ async function upsertUser(openid, anonId) {
   return rows[0];
 }
 
+/**
+ * 用户注册接口（手机号 + 密码）
+ * POST /api/user/register
+ */
+router.post('/register', async (req, res) => {
+  if (!getPool()) {
+    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接，无法注册' });
+    return;
+  }
+
+  const { phone, password, nickname } = req.body;
+
+  if (!phone || !password) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '手机号和密码不能为空' });
+    return;
+  }
+
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    res.status(400).json({ error: 'INVALID_PHONE', message: '手机号格式不正确' });
+    return;
+  }
+
+  if (password.length < 6) {
+    res.status(400).json({ error: 'INVALID_PASSWORD', message: '密码长度不能少于6位' });
+    return;
+  }
+
+  try {
+    const existing = await query('SELECT id FROM user WHERE phone = ? LIMIT 1', [phone]);
+    if (existing.length > 0) {
+      res.status(409).json({ error: 'PHONE_EXISTS', message: '该手机号已被注册' });
+      return;
+    }
+
+    const hashedPassword = hashPassword(password);
+    await execute(
+      `INSERT INTO user (phone, password, nickname, created_at, updated_at)
+       VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+      [phone, hashedPassword, nickname || '用户']
+    );
+
+    const rows = await query('SELECT id, phone, nickname, created_at FROM user WHERE phone = ? LIMIT 1', [phone]);
+    const user = rows[0];
+    const token = signUserToken(user.id, user.phone);
+    const expiresIn = parseExpiresSeconds(process.env.JWT_EXPIRES_IN || '7d');
+
+    res.json({
+      success: true,
+      token,
+      expires_in: expiresIn,
+      user: { id: user.id, phone: user.phone, nickname: user.nickname }
+    });
+  } catch (err) {
+    console.error('[知礼] 注册失败:', err.message);
+    res.status(500).json({ error: 'REGISTER_FAILED', message: '注册失败，请稍后重试' });
+  }
+});
+
+/**
+ * 用户登录接口（手机号 + 密码）
+ * POST /api/user/login
+ */
 router.post('/login', loginRateLimit, async (req, res) => {
   if (!getPool()) {
     res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接，无法登录' });
     return;
   }
 
-  const code = req.body?.code;
-  if (!code || typeof code !== 'string') {
-    res.status(400).json({ error: 'BAD_REQUEST', message: '缺少 body.code（wx.login 返回的临时码）' });
+  const { phone, password, code } = req.body;
+
+  if (code) {
+    return handleWechatLogin(req, res);
+  }
+
+  if (!phone || !password) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '手机号和密码不能为空' });
     return;
   }
 
+  try {
+    const rows = await query('SELECT id, phone, password, nickname FROM user WHERE phone = ? LIMIT 1', [phone]);
+    if (!rows.length) {
+      res.status(401).json({ error: 'INVALID_CREDENTIALS', message: '手机号或密码错误' });
+      return;
+    }
+
+    const user = rows[0];
+    const hashedPassword = hashPassword(password);
+
+    if (user.password !== hashedPassword) {
+      res.status(401).json({ error: 'INVALID_CREDENTIALS', message: '手机号或密码错误' });
+      return;
+    }
+
+    const token = signUserToken(user.id, user.phone);
+    const expiresIn = parseExpiresSeconds(process.env.JWT_EXPIRES_IN || '7d');
+
+    res.json({
+      success: true,
+      token,
+      expires_in: expiresIn,
+      user: { id: user.id, phone: user.phone, nickname: user.nickname }
+    });
+  } catch (err) {
+    console.error('[知礼] 登录失败:', err.message);
+    res.status(500).json({ error: 'LOGIN_FAILED', message: '登录失败，请稍后重试' });
+  }
+});
+
+async function handleWechatLogin(req, res) {
+  const code = req.body.code;
   const anonFromBody = req.body?.anon_id ?? req.body?.zhili_vid;
 
   try {
@@ -80,14 +184,15 @@ router.post('/login', loginRateLimit, async (req, res) => {
     const token = signUserToken(row.id, row.openid);
     const expiresIn = parseExpiresSeconds(process.env.JWT_EXPIRES_IN || '7d');
     res.json({
+      success: true,
       token,
       expires_in: expiresIn,
       user: { id: row.id, openid: row.openid, anon_id: row.anon_id || null },
     });
   } catch (err) {
     const status = err.status || 500;
-    if (status >= 500) console.error('[知礼] 登录失败:', err.message);
-    const code =
+    if (status >= 500) console.error('[知礼] 微信登录失败:', err.message);
+    const errorCode =
       err.message === 'INVALID_CODE'
         ? 'INVALID_CODE'
         : err.message === 'WECHAT_NOT_CONFIGURED'
@@ -95,26 +200,126 @@ router.post('/login', loginRateLimit, async (req, res) => {
           : err.message === 'WECHAT_API_ERROR' || err.errcode != null
             ? 'WECHAT_API_ERROR'
             : 'LOGIN_FAILED';
-    const body = { error: code, message: status === 502 ? '微信接口异常' : err.message };
+    const body = { error: errorCode, message: status === 502 ? '微信接口异常' : err.message };
     if (err.errcode != null) body.wechat_errcode = err.errcode;
     res.status(status).json(body);
   }
-});
+}
 
+/**
+ * 获取用户信息
+ * GET /api/user/me
+ */
 router.get('/me', requireAuth, async (req, res) => {
   if (!getPool()) {
     res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
     return;
   }
   try {
-    const rows = await query('SELECT id, openid, anon_id, created_at FROM user WHERE id = ? LIMIT 1', [req.userId]);
+    const rows = await query('SELECT id, phone, nickname, avatar, created_at, updated_at FROM user WHERE id = ? LIMIT 1', [req.userId]);
     if (!rows.length) {
       res.status(404).json({ error: 'NOT_FOUND', message: '用户不存在' });
       return;
     }
-    res.json({ user: rows[0] });
+    res.json({ success: true, user: rows[0] });
   } catch (e) {
     res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
+});
+
+/**
+ * 更新用户信息
+ * PUT /api/user/me
+ */
+router.put('/me', requireAuth, async (req, res) => {
+  if (!getPool()) {
+    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
+
+  const { nickname, avatar } = req.body;
+
+  try {
+    await execute(
+      `UPDATE user SET nickname = COALESCE(?, nickname), avatar = COALESCE(?, avatar), updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [nickname, avatar, req.userId]
+    );
+
+    const rows = await query('SELECT id, phone, nickname, avatar, created_at, updated_at FROM user WHERE id = ? LIMIT 1', [req.userId]);
+    res.json({ success: true, user: rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
+});
+
+/**
+ * 修改密码
+ * PUT /api/user/password
+ */
+router.put('/password', requireAuth, async (req, res) => {
+  if (!getPool()) {
+    res.status(503).json({ error: 'DB_UNAVAILABLE', message: '数据库未连接' });
+    return;
+  }
+
+  const { oldPassword, newPassword } = req.body;
+
+  if (!oldPassword || !newPassword) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '旧密码和新密码不能为空' });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: 'INVALID_PASSWORD', message: '新密码长度不能少于6位' });
+    return;
+  }
+
+  try {
+    const rows = await query('SELECT password FROM user WHERE id = ? LIMIT 1', [req.userId]);
+    if (!rows.length) {
+      res.status(404).json({ error: 'NOT_FOUND', message: '用户不存在' });
+      return;
+    }
+
+    const hashedOldPassword = hashPassword(oldPassword);
+    if (rows[0].password !== hashedOldPassword) {
+      res.status(401).json({ error: 'INVALID_PASSWORD', message: '旧密码不正确' });
+      return;
+    }
+
+    const hashedNewPassword = hashPassword(newPassword);
+    await execute('UPDATE user SET password = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [hashedNewPassword, req.userId]);
+
+    res.json({ success: true, message: '密码修改成功' });
+  } catch (e) {
+    res.status(500).json({ error: 'SERVER_ERROR', message: e.message });
+  }
+});
+
+/**
+ * 刷新 Token
+ * POST /api/user/refresh
+ */
+router.post('/refresh', async (req, res) => {
+  const token = req.body?.token;
+  if (!token) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '缺少 token' });
+    return;
+  }
+
+  try {
+    const payload = verifyToken(token);
+    if (!payload) {
+      res.status(401).json({ error: 'INVALID_TOKEN', message: '无效的 token' });
+      return;
+    }
+
+    const newToken = signUserToken(payload.userId, payload.openid);
+    const expiresIn = parseExpiresSeconds(process.env.JWT_EXPIRES_IN || '7d');
+
+    res.json({ success: true, token: newToken, expires_in: expiresIn });
+  } catch (e) {
+    res.status(401).json({ error: 'TOKEN_EXPIRED', message: 'token 已过期' });
   }
 });
 
