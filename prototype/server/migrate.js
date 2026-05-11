@@ -10,6 +10,7 @@ const MIGRATION_002 = path.join(__dirname, 'migrations', '002_user_profile_scori
 const MIGRATION_003 = path.join(__dirname, 'migrations', '003_product_listed.sql');
 const MIGRATION_004 = path.join(__dirname, 'migrations', '004_import_history.sql');
 const MIGRATION_005 = path.join(__dirname, 'migrations', '005_add_user_auth_fields.sql');
+const MIGRATION_006 = path.join(__dirname, 'migrations', '006_add_order_and_address.sql');
 
 function loadMigrationSql() {
   return fs.readFileSync(MIGRATION_FILE, 'utf8');
@@ -102,6 +103,17 @@ async function apply005UserAuthFieldsIfNeeded() {
   console.log('[知礼 DB] 005 user auth fields:', MIGRATION_005);
 }
 
+/** 添加订单和收货地址表 */
+async function apply006OrderAndAddressIfNeeded() {
+  if (await tableExists('orders')) return;
+  const sql = fs.readFileSync(MIGRATION_006, 'utf8');
+  const statements = splitSqlStatements(sql);
+  for (const stmt of statements) {
+    await execute(stmt);
+  }
+  console.log('[知礼 DB] 006 order and address:', MIGRATION_006);
+}
+
 async function createTables() {
   try {
     await initDatabase();
@@ -114,6 +126,7 @@ async function createTables() {
     await apply003ProductListedIfNeeded();
     await apply004ImportHistoryIfNeeded();
     await apply005UserAuthFieldsIfNeeded();
+    await apply006OrderAndAddressIfNeeded();
     console.log('[知礼 DB] 迁移流程结束');
     process.exit(0);
   } catch (error) {

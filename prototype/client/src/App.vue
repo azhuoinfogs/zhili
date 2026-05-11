@@ -522,14 +522,14 @@ onUnmounted(() => {
     </div>
 
     <div v-else>
-      <ProfilePage 
-        v-if="currentPage === 'profile'" 
-        @logout="handleLogout"
-        @back="goBackFromProfile"
-      />
-      
-      <div v-else>
-        <main>
+      <div class="main-content">
+        <ProfilePage 
+          v-if="currentPage === 'profile'" 
+          @logout="handleLogout"
+          @back="goBackFromProfile"
+        />
+        
+        <main v-else>
           <section v-if="phase === 'landing'" class="landing">
             <div class="landing-bg" aria-hidden="true"></div>
             <div class="landing-top">
@@ -856,40 +856,40 @@ onUnmounted(() => {
             </div>
           </div>
         </main>
-
-        <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
-          <button
-            type="button"
-            class="tab-item"
-            :class="{ active: activeTab === 'home' }"
-            @click="goToHome"
-            aria-label="首页"
-          >
-            <span class="tab-icon">🏠</span>
-            <span class="tab-text">首页</span>
-          </button>
-          <button
-            type="button"
-            class="tab-item"
-            :class="{ active: activeTab === 'browse' }"
-            @click="goToBrowse"
-            aria-label="浏览"
-          >
-            <span class="tab-icon">✨</span>
-            <span class="tab-text">礼遇</span>
-          </button>
-          <button
-            type="button"
-            class="tab-item"
-            :class="{ active: activeTab === 'profile' }"
-            @click="goToProfile"
-            aria-label="我的"
-          >
-            <span class="tab-icon">👤</span>
-            <span class="tab-text">我的</span>
-          </button>
-        </nav>
       </div>
+
+      <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
+        <button
+          type="button"
+          class="tab-item"
+          :class="{ active: activeTab === 'home' }"
+          @click="goToHome"
+          aria-label="首页"
+        >
+          <span class="tab-icon">🏠</span>
+          <span class="tab-text">首页</span>
+        </button>
+        <button
+          type="button"
+          class="tab-item"
+          :class="{ active: activeTab === 'browse' }"
+          @click="goToBrowse"
+          aria-label="浏览"
+        >
+          <span class="tab-icon">✨</span>
+          <span class="tab-text">礼遇</span>
+        </button>
+        <button
+          type="button"
+          class="tab-item"
+          :class="{ active: activeTab === 'profile' }"
+          @click="goToProfile"
+          aria-label="我的"
+        >
+          <span class="tab-icon">👤</span>
+          <span class="tab-text">我的</span>
+        </button>
+      </nav>
     </div>
   </div>
 </template>
@@ -911,6 +911,12 @@ onUnmounted(() => {
 .glass {
   background: rgba(28, 25, 23, 0.55);
   backdrop-filter: blur(18px);
+}
+
+.main-content {
+  min-height: 100vh;
+  padding-bottom: 56px;
+  box-sizing: border-box;
 }
 
 .toast {

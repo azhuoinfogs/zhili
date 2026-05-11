@@ -40,11 +40,21 @@ export function isLoggedIn() {
   return Date.now() < Number(expiresAt);
 }
 
-export async function register(phone, password, nickname) {
+export async function sendCode(phone) {
+  const res = await fetch('/api/user/send-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ phone })
+  });
+  const data = await res.json();
+  return { ok: res.ok, ...data };
+}
+
+export async function register(phone, password, nickname, code) {
   const res = await fetch('/api/user/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ phone, password, nickname })
+    body: JSON.stringify({ phone, password, nickname, code })
   });
   const data = await res.json();
   if (res.ok && data.token) {

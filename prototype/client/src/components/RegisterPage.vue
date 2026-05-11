@@ -1,58 +1,106 @@
-<script setup>import { ref, reactive } from 'vue';
-import { register } from '../utils/auth.js';
+<script setup>
+import { ref, reactive } from 'vue';
+import { register, sendCode } from '../utils/auth.js';
+
 const emit = defineEmits(['register-success', 'go-login']);
 const loading = ref(false);
+const codeLoading = ref(false);
 const errorMsg = ref('');
+const codeCountdown = ref(0);
+let countdownTimer = null;
+
 const form = reactive({
- phone: '',
- password: '',
- confirmPassword: '',
- nickname: ''
+  phone: '',
+  password: '',
+  confirmPassword: '',
+  nickname: '',
+  code: ''
 });
+
+function startCountdown() {
+  codeCountdown.value = 60;
+  countdownTimer = setInterval(() => {
+    codeCountdown.value--;
+    if (codeCountdown.value <= 0) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+  }, 1000);
+}
+
+async function handleSendCode() {
+  if (!form.phone) {
+    errorMsg.value = '请输入手机号';
+    return;
+  }
+  if (!/^1[3-9]\d{9}$/.test(form.phone)) {
+    errorMsg.value = '请输入正确的手机号';
+    return;
+  }
+  
+  codeLoading.value = true;
+  try {
+    const result = await sendCode(form.phone);
+    if (result.ok) {
+      startCountdown();
+      errorMsg.value = '';
+    } else {
+      errorMsg.value = result.message || '发送失败';
+    }
+  } catch (err) {
+    errorMsg.value = '网络异常，请稍后重试';
+  } finally {
+    codeLoading.value = false;
+  }
+}
+
 async function handleSubmit() {
- errorMsg.value = '';
- if (!form.phone) {
- errorMsg.value = '请输入手机号';
- return;
- }
- if (!/^1[3-9]\d{9}$/.test(form.phone)) {
- errorMsg.value = '请输入正确的手机号';
- return;
- }
- if (!form.password) {
- errorMsg.value = '请输入密码';
- return;
- }
- if (form.password.length < 6) {
- errorMsg.value = '密码长度不能少于6位';
- return;
- }
- if (form.password !== form.confirmPassword) {
- errorMsg.value = '两次输入的密码不一致';
- return;
- }
- loading.value = true;
- try {
- const result = await register(form.phone, form.password, form.nickname);
- if (result.ok) {
- emit('register-success');
- }
- else {
- errorMsg.value = result.message || '注册失败';
- }
- }
- catch (err) {
- errorMsg.value = '网络异常，请稍后重试';
- }
- finally {
- loading.value = false;
- }
+  errorMsg.value = '';
+  
+  if (!form.phone) {
+    errorMsg.value = '请输入手机号';
+    return;
+  }
+  if (!/^1[3-9]\d{9}$/.test(form.phone)) {
+    errorMsg.value = '请输入正确的手机号';
+    return;
+  }
+  if (!form.code || form.code.length !== 6) {
+    errorMsg.value = '请输入6位验证码';
+    return;
+  }
+  if (!form.password) {
+    errorMsg.value = '请输入密码';
+    return;
+  }
+  if (form.password.length < 6) {
+    errorMsg.value = '密码长度不能少于6位';
+    return;
+  }
+  if (form.password !== form.confirmPassword) {
+    errorMsg.value = '两次输入的密码不一致';
+    return;
+  }
+  
+  loading.value = true;
+  try {
+    const result = await register(form.phone, form.password, form.nickname, form.code);
+    if (result.ok) {
+      emit('register-success');
+    } else {
+      errorMsg.value = result.message || '注册失败';
+    }
+  } catch (err) {
+    errorMsg.value = '网络异常，请稍后重试';
+  } finally {
+    loading.value = false;
+  }
 }
 </script>
 
 <template>
   <div class="register-page">
-    <div class="register-bg" aria-hidden="true" />
+    <div class="register-bg" aria-hidden="true"></div>
     
     <div class="register-container glass">
       <header class="register-header">
@@ -72,6 +120,29 @@ async function handleSubmit() {
             class="form-input"
             :disabled="loading"
           />
+        </div>
+        
+        <div class="form-group">
+          <label for="code" class="form-label">验证码</label>
+          <div class="code-input-group">
+            <input
+              id="code"
+              v-model="form.code"
+              type="tel"
+              maxlength="6"
+              placeholder="请输入验证码"
+              class="form-input code-input"
+              :disabled="loading"
+            />
+            <button
+              type="button"
+              class="code-btn"
+              :disabled="loading || codeLoading || codeCountdown > 0"
+              @click="handleSendCode"
+            >
+              {{ codeCountdown > 0 ? `${codeCountdown}s` : (codeLoading ? '发送中…' : '获取验证码') }}
+            </button>
+          </div>
         </div>
         
         <div class="form-group">
@@ -114,7 +185,7 @@ async function handleSubmit() {
         <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
         
         <button type="submit" class="cta-gold" :disabled="loading">
-          <span v-if="loading" class="btn-spinner" aria-hidden="true" />
+          <span v-if="loading" class="btn-spinner" aria-hidden="true"></span>
           {{ loading ? '注册中…' : '注册' }}
         </button>
       </form>
@@ -222,6 +293,38 @@ async function handleSubmit() {
 
 .form-input:disabled {
   opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.code-input-group {
+  display: flex;
+  gap: 10px;
+}
+
+.code-input {
+  flex: 1;
+}
+
+.code-btn {
+  padding: 14px 16px;
+  background: rgba(202, 138, 4, 0.15);
+  border: 1px solid rgba(202, 138, 4, 0.3);
+  border-radius: 2px;
+  color: #ca8a04;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.code-btn:hover:not(:disabled) {
+  background: rgba(202, 138, 4, 0.25);
+  border-color: rgba(202, 138, 4, 0.5);
+}
+
+.code-btn:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 

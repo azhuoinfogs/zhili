@@ -6,7 +6,6 @@ import { signUserToken, verifyToken } from '../lib/jwt.js';
 import { requireAuth } from '../middleware/requireAuth.js';
 import { rowToApiProfile } from '../lib/profileSchema.js';
 import { productsData } from '../productsData.js';
-import { getListedProductPool } from '../lib/productCatalog.js';
 import {
   parsePaging,
   shelfFromQuery,
@@ -15,6 +14,7 @@ import {
   runHotList,
   runPersonalizedList,
 } from '../lib/recommendCore.js';
+import { sendVerificationCode, verifyCode } from '../lib/sms.js';
 
 const router = Router();
 
@@ -66,7 +66,37 @@ async function upsertUser(openid, anonId) {
 }
 
 /**
- * 用户注册接口（手机号 + 密码）
+ * 发送验证码接口
+ * POST /api/user/send-code
+ */
+router.post('/send-code', async (req, res) => {
+  const { phone } = req.body;
+
+  if (!phone) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: '手机号不能为空' });
+    return;
+  }
+
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    res.status(400).json({ error: 'INVALID_PHONE', message: '手机号格式不正确' });
+    return;
+  }
+
+  try {
+    const result = await sendVerificationCode(phone);
+    if (result.success) {
+      res.json({ success: true, message: result.message });
+    } else {
+      res.status(400).json({ error: 'SEND_FAILED', message: result.message });
+    }
+  } catch (err) {
+    console.error('[知礼] 发送验证码失败:', err.message);
+    res.status(500).json({ error: 'SEND_FAILED', message: '发送失败，请稍后重试' });
+  }
+});
+
+/**
+ * 用户注册接口（手机号 + 密码 + 验证码）
  * POST /api/user/register
  */
 router.post('/register', async (req, res) => {
@@ -75,10 +105,15 @@ router.post('/register', async (req, res) => {
     return;
   }
 
-  const { phone, password, nickname } = req.body;
+  const { phone, password, nickname, code } = req.body;
 
   if (!phone || !password) {
     res.status(400).json({ error: 'BAD_REQUEST', message: '手机号和密码不能为空' });
+    return;
+  }
+
+  if (!code || code.length !== 6) {
+    res.status(400).json({ error: 'INVALID_CODE', message: '验证码格式错误' });
     return;
   }
 
@@ -93,6 +128,12 @@ router.post('/register', async (req, res) => {
   }
 
   try {
+    // 验证验证码
+    if (!verifyCode(phone, code)) {
+      res.status(400).json({ error: 'INVALID_CODE', message: '验证码错误或已过期' });
+      return;
+    }
+
     const existing = await query('SELECT id FROM user WHERE phone = ? LIMIT 1', [phone]);
     if (existing.length > 0) {
       res.status(409).json({ error: 'PHONE_EXISTS', message: '该手机号已被注册' });
@@ -100,10 +141,11 @@ router.post('/register', async (req, res) => {
     }
 
     const hashedPassword = hashPassword(password);
+    const defaultNickname = nickname || '用户' + phone.slice(-4);
     await execute(
       `INSERT INTO user (phone, password, nickname, created_at, updated_at)
        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-      [phone, hashedPassword, nickname || '用户']
+      [phone, hashedPassword, defaultNickname]
     );
 
     const rows = await query('SELECT id, phone, nickname, created_at FROM user WHERE phone = ? LIMIT 1', [phone]);
