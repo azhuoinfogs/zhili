@@ -65,9 +65,9 @@ function showToast(msg) {
 }
 
 const listFilters = reactive({
-  occasion: 'birthday',
-  budget: '100-300',
-  style: 'practical'
+  occasion: '',
+  budget: '',
+  style: ''
 });
 let debounceTimer = null;
 
@@ -133,6 +133,17 @@ const profilePayload = computed(() => ({
   style: form.style
 }));
 
+const filterPayload = computed(() => ({
+  relation: form.relation,
+  age_band: form.ageBand,
+  interests: form.interests,
+  occasion: listFilters.occasion || form.occasion,
+  budget: listFilters.budget || form.budget,
+  gender: form.gender,
+  taboos: form.taboos,
+  style: listFilters.style || form.style
+}));
+
 function track(eventName, props = {}) {
   const data = {
     event: eventName,
@@ -152,10 +163,10 @@ function track(eventName, props = {}) {
   }
 }
 
-async function fetchRecommendations(reset = false) {
+async function fetchRecommendations(reset = false, payload = null) {
   loading.value = reset;
   try {
-    const q = encodeURIComponent(JSON.stringify(profilePayload.value));
+    const q = encodeURIComponent(JSON.stringify(payload || profilePayload.value));
     const offset = reset ? 0 : products.value.length;
     const r = await fetch(`/api/recommend?profile=${q}&offset=${offset}&limit=${PAGE_SIZE}`);
     if (r.ok) {
@@ -181,7 +192,7 @@ function scheduleRefetch() {
   if (phase.value !== 'browse') return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    fetchRecommendations(true);
+    fetchRecommendations(true, filterPayload.value);
   }, 500);
 }
 
@@ -643,6 +654,7 @@ onUnmounted(() => {
               <div class="filter-row">
                 <span class="filter-label">场合:</span>
                 <select v-model="listFilters.occasion" class="filter-select">
+                  <option value="">全部</option>
                   <option value="birthday">生日</option>
                   <option value="anniversary">纪念日</option>
                   <option value="festival">节日</option>
@@ -654,6 +666,7 @@ onUnmounted(() => {
               <div class="filter-row">
                 <span class="filter-label">预算:</span>
                 <select v-model="listFilters.budget" class="filter-select">
+                  <option value="">全部</option>
                   <option value="0-100">0–100</option>
                   <option value="100-300">100–300</option>
                   <option value="300-500">300–500</option>
@@ -664,6 +677,7 @@ onUnmounted(() => {
               <div class="filter-row">
                 <span class="filter-label">风格:</span>
                 <select v-model="listFilters.style" class="filter-select">
+                  <option value="">全部</option>
                   <option value="practical">实用主义</option>
                   <option value="creative">创意趣味</option>
                   <option value="luxury">品质奢华</option>
@@ -671,7 +685,7 @@ onUnmounted(() => {
                   <option value="cultural">文化艺术</option>
                 </select>
               </div>
-              <button type="button" class="filter-clear" @click="listFilters.occasion='birthday'; listFilters.budget='100-300'; listFilters.style='practical'">重置筛选</button>
+              <button type="button" class="filter-clear" @click="listFilters.occasion=''; listFilters.budget=''; listFilters.style=''">重置筛选</button>
             </div>
 
             <div 
