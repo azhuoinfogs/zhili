@@ -284,17 +284,27 @@ async function submitTags() {
   try {
     const token = localStorage.getItem('zhili_token');
     if (token) {
+      // 转换为服务器端期望的驼峰命名格式
+      const serverProfile = {
+        name: '默认画像',
+        relation: form.relation,
+        ageBand: form.ageBand,
+        interests: form.interests,
+        occasion: form.occasion,
+        budget: form.budget,
+        gender: form.gender,
+        taboos: form.taboos,
+        style: form.style,
+        is_default: true
+      };
+      
       const res = await fetch('/api/profile', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          ...profilePayload.value,
-          is_default: true,
-          name: '默认画像'
-        })
+        body: JSON.stringify(serverProfile)
       });
       
       if (res.ok) {

@@ -249,6 +249,15 @@ async function deleteAddress(id) {
   }
 }
 
+function handleMenuClick(key) {
+  activeTab.value = key;
+  if (key === 'profiles') {
+    fetchProfiles();
+  } else if (key === 'addresses') {
+    fetchAddresses();
+  }
+}
+
 // 画像相关函数
 async function fetchProfiles() {
   profilesLoading.value = true;
@@ -353,7 +362,7 @@ onMounted(() => {
           :key="item.key"
           class="menu-item"
           :class="{ 'menu-divider': index === 3 }"
-          @click="activeTab = item.key"
+          @click="handleMenuClick(item.key)"
         >
           <span class="menu-icon">{{ item.icon }}</span>
           <div class="menu-content">
