@@ -6,6 +6,7 @@ const emit = defineEmits(['logout']);
 
 const user = ref(getUser());
 const activeTab = ref('profile'); // profile, password, orders, addresses
+const settingsTab = ref('info'); // info, password
 const loading = ref(false);
 const toastMsg = ref('');
 
@@ -474,8 +475,22 @@ onMounted(() => {
         <div class="placeholder"></div>
       </header>
       
-      <div class="settings-section">
-        <h4 class="settings-title">个人信息</h4>
+      <!-- 设置子菜单 -->
+      <div class="settings-tabs">
+        <button 
+          class="settings-tab" 
+          :class="{ active: settingsTab === 'info' }"
+          @click="settingsTab = 'info'"
+        >个人信息</button>
+        <button 
+          class="settings-tab" 
+          :class="{ active: settingsTab === 'password' }"
+          @click="settingsTab = 'password'"
+        >修改密码</button>
+      </div>
+      
+      <!-- 个人信息 -->
+      <div v-if="settingsTab === 'info'" class="settings-content">
         <form class="edit-form" @submit.prevent="saveProfile">
           <div class="form-group">
             <label for="nickname" class="form-label">昵称</label>
@@ -499,8 +514,8 @@ onMounted(() => {
         </form>
       </div>
       
-      <div class="settings-section">
-        <h4 class="settings-title">密码安全</h4>
+      <!-- 修改密码 -->
+      <div v-if="settingsTab === 'password'" class="settings-content">
         <form class="edit-form" @submit.prevent="savePassword">
           <div class="form-group">
             <label for="oldPassword" class="form-label">旧密码</label>
@@ -710,7 +725,11 @@ onMounted(() => {
 
 .menu-icon {
   font-size: 1.25rem;
+  width: 24px;
   margin-right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .menu-content {
@@ -792,6 +811,8 @@ onMounted(() => {
   font-size: 12px;
   padding: 6px 14px;
   cursor: pointer;
+  min-width: 60px;
+  text-align: center;
 }
 
 .loading-text {
@@ -855,20 +876,45 @@ onMounted(() => {
   color: #dc2626;
 }
 
-.settings-section {
-  padding: 16px;
+.settings-tabs {
+  display: flex;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.settings-section:last-of-type {
-  border-bottom: none;
+.settings-tab {
+  flex: 1;
+  padding: 14px;
+  background: none;
+  border: none;
+  color: #78716c;
+  font-size: 13px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
 }
 
-.settings-title {
-  margin: 0 0 12px;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-  color: #a8a29e;
+.settings-tab:hover {
+  color: #fafaf9;
+}
+
+.settings-tab.active {
+  color: #ca8a04;
+}
+
+.settings-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 2px;
+  background: #ca8a04;
+  border-radius: 2px;
+}
+
+.settings-content {
+  padding: 16px;
 }
 
 .edit-form {
@@ -1015,14 +1061,14 @@ onMounted(() => {
 }
 
 .addresses-list {
-  padding: 12px;
+  padding: 16px;
 }
 
 .address-item {
   padding: 14px;
   background: rgba(12, 10, 9, 0.4);
   border-radius: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .address-header {
@@ -1170,7 +1216,7 @@ onMounted(() => {
 
 .address-form {
   padding: 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 0;
 }
 
 .profile-foot {

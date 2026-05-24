@@ -197,6 +197,7 @@ function goExplore() {
 function goToHome() {
   activeTab.value = 'home';
   phase.value = 'landing';
+  currentPage.value = 'main';
   track('navigate_home');
 }
 
@@ -858,7 +859,7 @@ onUnmounted(() => {
         </main>
       </div>
 
-      <nav :class="{ 'tab-bar glass': true, 'hidden': phase === 'landing' }" role="navigation">
+      <nav :class="{ 'tab-bar glass': true }" role="navigation">
         <button
           type="button"
           class="tab-item"
