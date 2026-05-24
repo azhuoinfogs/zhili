@@ -5,7 +5,7 @@ import LoginPage from './components/LoginPage.vue';
 import RegisterPage from './components/RegisterPage.vue';
 import ProfilePage from './components/ProfilePage.vue';
 
-const STORAGE_KEYS = { uid: 'zhili_vid', group: 'zhili_group', profile: 'zhili_profile' };
+const STORAGE_KEYS = { uid: 'zhili_vid', group: 'zhili_group', profile: 'zhili_profile', currentProfileId: 'zhili_current_profile_id' };
 
 function getOrCreateUserId() {
   let id = localStorage.getItem(STORAGE_KEYS.uid);
@@ -175,10 +175,21 @@ async function fetchRecommendations(reset = false, payload = null) {
       pullDistance.value = 0;
       return;
     }
-    const q = encodeURIComponent(JSON.stringify(payload || profilePayload.value));
+    
+    const currentProfileId = localStorage.getItem(STORAGE_KEYS.currentProfileId);
     const offset = reset ? 0 : products.value.length;
-    console.log('[客户端] 发送推荐请求:', { profile: payload || profilePayload.value, token: !!token });
-    const r = await fetch(`/api/recommend?profile=${q}&offset=${offset}&limit=${PAGE_SIZE}`, {
+    let url = `/api/recommend?offset=${offset}&limit=${PAGE_SIZE}`;
+    
+    if (currentProfileId) {
+      url += `&profile_id=${currentProfileId}`;
+      console.log('[客户端] 发送推荐请求:', { profile_id: currentProfileId, token: !!token });
+    } else {
+      const q = encodeURIComponent(JSON.stringify(payload || profilePayload.value));
+      url += `&profile=${q}`;
+      console.log('[客户端] 发送推荐请求:', { profile: payload || profilePayload.value, token: !!token });
+    }
+    
+    const r = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     console.log('[客户端] 推荐请求响应:', r.status, r.statusText);
@@ -238,13 +249,17 @@ function goToHome() {
   track('navigate_home');
 }
 
-function goToBrowse() {
+async function goToBrowse() {
   activeTab.value = 'browse';
+  
   if (phase.value === 'landing') {
     phase.value = 'tags';
   } else if (phase.value === 'tags' && products.value.length) {
     phase.value = 'browse';
+  } else if (phase.value === 'browse' && localStorage.getItem(STORAGE_KEYS.currentProfileId)) {
+    await fetchRecommendations(true);
   }
+  
   track('navigate_browse');
 }
 
@@ -265,6 +280,32 @@ function backToTags() {
 
 async function submitTags() {
   track('form_submit', { ...profilePayload.value });
+  
+  try {
+    const token = localStorage.getItem('zhili_token');
+    if (token) {
+      const res = await fetch('/api/profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...profilePayload.value,
+          is_default: true,
+          name: '默认画像'
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem(STORAGE_KEYS.currentProfileId, String(data.profile.id));
+      }
+    }
+  } catch (e) {
+    console.warn('保存profile到服务器失败:', e);
+  }
+  
   localStorage.setItem(STORAGE_KEYS.profile, JSON.stringify(profilePayload.value));
   listFilters.occasion = form.occasion;
   listFilters.budget = form.budget;

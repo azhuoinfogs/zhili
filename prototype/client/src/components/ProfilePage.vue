@@ -23,12 +23,13 @@ const passwordForm = reactive({
 const favorites = ref([]);
 const favoritesLoading = ref(false);
 
-const orders = ref([]);
-const ordersLoading = ref(false);
-
 const addresses = ref([]);
 const addressesLoading = ref(false);
 const editingAddress = ref(null);
+
+// 画像相关
+const profiles = ref([]);
+const profilesLoading = ref(false);
 
 const addressForm = reactive({
   name: '',
@@ -124,25 +125,6 @@ async function fetchFavorites() {
     favorites.value = [];
   } finally {
     favoritesLoading.value = false;
-  }
-}
-
-async function fetchOrders() {
-  ordersLoading.value = true;
-  try {
-    const token = localStorage.getItem('zhili_token');
-    const res = await fetch('/api/order', {
-      method: 'GET',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (res.ok) {
-      const data = await res.json();
-      orders.value = data.list || [];
-    }
-  } catch {
-    orders.value = [];
-  } finally {
-    ordersLoading.value = false;
   }
 }
 
@@ -267,20 +249,75 @@ async function deleteAddress(id) {
   }
 }
 
+// 画像相关函数
+async function fetchProfiles() {
+  profilesLoading.value = true;
+  try {
+    const token = localStorage.getItem('zhili_token');
+    const res = await fetch('/api/profile', {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      profiles.value = data.list || [];
+    }
+  } catch {
+    profiles.value = [];
+  } finally {
+    profilesLoading.value = false;
+  }
+}
+
+async function setDefaultProfile(profileId) {
+  const token = localStorage.getItem('zhili_token');
+  try {
+    const res = await fetch(`/api/profile/${profileId}/default`, {
+      method: 'PUT',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      // 更新本地存储
+      localStorage.setItem('zhili_current_profile_id', String(profileId));
+      // 刷新画像列表
+      await fetchProfiles();
+      showToast('已设为默认画像');
+    }
+  } catch {
+    showToast('操作失败');
+  }
+}
+
+async function deleteProfile(profileId) {
+  if (!confirm('确定要删除这个画像吗？')) return;
+  
+  const token = localStorage.getItem('zhili_token');
+  try {
+    const res = await fetch(`/api/profile/${profileId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (res.ok) {
+      profiles.value = profiles.value.filter(p => p.id !== profileId);
+      // 如果删除的是当前默认画像，清除本地存储
+      const currentProfileId = localStorage.getItem('zhili_current_profile_id');
+      if (currentProfileId === String(profileId)) {
+        localStorage.removeItem('zhili_current_profile_id');
+      }
+      showToast('删除成功');
+    }
+  } catch {
+    showToast('操作失败');
+  }
+}
+
 const menuItems = [
-  { icon: '📦', title: '我的订单', subtitle: '查看全部订单', key: 'orders' },
+  { icon: '👤', title: '我的画像', subtitle: '管理送礼人画像', key: 'profiles' },
   { icon: '❤️', title: '我的收藏', subtitle: '收藏的礼品', key: 'favorites' },
   { icon: '🕐', title: '浏览历史', subtitle: '最近浏览', key: 'history' },
   { icon: '📍', title: '收货地址', subtitle: '管理收货地址', key: 'addresses' },
   { icon: '🔔', title: '消息通知', subtitle: '系统消息', key: 'notifications' },
   { icon: '⚙️', title: '设置', subtitle: '账号与安全', key: 'settings' }
-];
-
-const orderStats = [
-  { label: '待付款', count: 0 },
-  { label: '待发货', count: 0 },
-  { label: '待收货', count: 0 },
-  { label: '待评价', count: 0 }
 ];
 
 onMounted(() => {
@@ -307,14 +344,6 @@ onMounted(() => {
           </div>
           <button class="edit-btn" @click="activeTab = 'settings'">编辑</button>
         </div>
-        
-        <!-- 订单统计 -->
-        <div class="order-stats">
-          <div v-for="stat in orderStats" :key="stat.label" class="stat-item">
-            <span class="stat-count">{{ stat.count }}</span>
-            <span class="stat-label">{{ stat.label }}</span>
-          </div>
-        </div>
       </section>
       
       <!-- 菜单项 -->
@@ -340,35 +369,57 @@ onMounted(() => {
     
     <!-- 二级页面内容 -->
     <template v-else>
-      <!-- 我的订单 -->
-      <section v-if="activeTab === 'orders'" class="content glass full-page">
+      <!-- 我的画像 -->
+    <section v-if="activeTab === 'profiles'" class="content glass full-page">
       <header class="section-header">
         <button class="back-btn" @click="activeTab = 'profile'">← 返回</button>
-        <h3 class="font-serif">我的订单</h3>
-        <div class="placeholder"></div>
+        <h3 class="font-serif">我的画像</h3>
+        <button class="link-ghost" @click="fetchProfiles">刷新</button>
       </header>
-      <div v-if="ordersLoading" class="loading-text">加载中…</div>
-      <div v-else-if="orders.length === 0" class="empty-state">
-        <p>暂无订单</p>
+      <div v-if="profilesLoading" class="loading-text">加载中…</div>
+      <div v-else-if="profiles.length === 0" class="empty-state">
+        <p>暂无画像</p>
+        <p style="font-size: 12px; color: #78716c; margin-top: 8px;">完成一次推荐后将自动创建画像</p>
       </div>
-      <div v-else class="orders-list">
-        <div v-for="order in orders" :key="order.id" class="order-card">
-          <div class="order-header">
-            <span class="order-id">订单号: {{ order.id }}</span>
-            <span class="order-status">{{ order.status }}</span>
-          </div>
-          <div class="order-items">
-            <div v-for="item in order.items" :key="item.product_id" class="order-item">
-              <img :src="item.image" class="order-item-img" />
-              <div class="order-item-info">
-                <span class="order-item-name">{{ item.name }}</span>
-                <span class="order-item-price">¥{{ item.price }}</span>
-              </div>
+      <div v-else class="profiles-list">
+        <div 
+          v-for="(profile, index) in profiles" 
+          :key="profile.id" 
+          class="profile-card"
+          :class="{ 'is-default': profile.is_default }"
+        >
+          <div class="profile-header">
+            <div class="profile-rank" v-if="index === 0 && profile.is_default">⭐</div>
+            <div class="profile-rank" v-else>{{ index + 1 }}</div>
+            <div class="profile-info">
+              <span class="profile-name">{{ profile.name || '未命名画像' }}</span>
+              <span v-if="profile.is_default" class="profile-default-badge">默认</span>
             </div>
           </div>
-          <div class="order-footer">
-            <span class="order-total">合计: ¥{{ order.total }}</span>
-            <button class="order-btn">去支付</button>
+          <div class="profile-details">
+            <div class="profile-tag">
+              <span class="tag-label">送礼对象:</span>
+              <span class="tag-value">{{ profile.occasion || '未设置' }}</span>
+            </div>
+            <div class="profile-tag">
+              <span class="tag-label">预算:</span>
+              <span class="tag-value">{{ profile.budget || '未设置' }}</span>
+            </div>
+            <div class="profile-tag">
+              <span class="tag-label">风格:</span>
+              <span class="tag-value">{{ profile.style || '未设置' }}</span>
+            </div>
+          </div>
+          <div class="profile-actions">
+            <button 
+              v-if="!profile.is_default" 
+              class="profile-btn default-btn" 
+              @click="setDefaultProfile(profile.id)"
+            >设为默认</button>
+            <button 
+              class="profile-btn delete-btn" 
+              @click="deleteProfile(profile.id)"
+            >删除</button>
           </div>
         </div>
       </div>
@@ -661,36 +712,6 @@ onMounted(() => {
 
 .edit-btn:hover {
   background: rgba(255, 255, 255, 0.3);
-}
-
-.order-stats {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  justify-content: space-around;
-  margin-top: 20px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  border-radius: 12px;
-}
-
-.stat-item {
-  text-align: center;
-}
-
-.stat-count {
-  display: block;
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: #fff;
-}
-
-.stat-label {
-  display: block;
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.8);
-  margin-top: 4px;
 }
 
 .glass {
@@ -1121,102 +1142,130 @@ onMounted(() => {
   color: #dc2626;
 }
 
-.orders-list {
+.address-form {
+  padding: 16px;
+  margin-bottom: 0;
+}
+
+/* 画像列表样式 */
+.profiles-list {
   padding: 12px;
 }
 
-.order-card {
+.profile-card {
+  background: rgba(12, 10, 9, 0.4);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border: 1px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.profile-card.is-default {
+  border-color: rgba(202, 138, 4, 0.3);
+  background: rgba(202, 138, 4, 0.05);
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.profile-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(202, 138, 4, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ca8a04;
+}
+
+.profile-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.profile-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fafaf9;
+}
+
+.profile-default-badge {
+  padding: 2px 8px;
+  background: rgba(202, 138, 4, 0.2);
+  border-radius: 999px;
+  font-size: 10px;
+  color: #ca8a04;
+}
+
+.profile-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px;
   background: rgba(12, 10, 9, 0.4);
   border-radius: 4px;
-  padding: 14px;
-  margin-bottom: 12px;
 }
 
-.order-header {
+.profile-tag {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: 4px;
 }
 
-.order-id {
+.tag-label {
   font-size: 11px;
   color: #78716c;
 }
 
-.order-status {
+.tag-value {
   font-size: 12px;
-  color: #ca8a04;
+  color: #fafaf9;
 }
 
-.order-items {
+.profile-actions {
   display: flex;
-  flex-direction: column;
   gap: 10px;
 }
 
-.order-item {
-  display: flex;
-  gap: 12px;
-}
-
-.order-item-img {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
+.profile-btn {
+  padding: 8px 16px;
   border-radius: 4px;
-}
-
-.order-item-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.order-item-name {
-  font-size: 13px;
-  color: #fafaf9;
-}
-
-.order-item-price {
-  font-size: 14px;
-  font-weight: 500;
-  color: #ca8a04;
-}
-
-.order-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.order-total {
-  font-size: 13px;
-  color: #fafaf9;
-}
-
-.order-btn {
-  padding: 8px 20px;
-  background: #ca8a04;
-  border: none;
-  border-radius: 999px;
-  color: #0c0a09;
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
+  border: none;
+  transition: all 0.2s ease;
 }
 
-.order-btn:hover {
-  background: #eab308;
+.profile-btn.default-btn {
+  background: rgba(202, 138, 4, 0.15);
+  border: 1px solid rgba(202, 138, 4, 0.3);
+  color: #ca8a04;
 }
 
-.address-form {
-  padding: 16px;
-  margin-bottom: 0;
+.profile-btn.default-btn:hover {
+  background: rgba(202, 138, 4, 0.25);
+}
+
+.profile-btn.delete-btn {
+  background: rgba(220, 38, 38, 0.1);
+  border: 1px solid rgba(220, 38, 38, 0.3);
+  color: #dc2626;
+}
+
+.profile-btn.delete-btn:hover {
+  background: rgba(220, 38, 38, 0.15);
 }
 
 .profile-foot {
