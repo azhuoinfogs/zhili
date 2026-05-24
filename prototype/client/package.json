@@ -5,9 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:prod": "vite --mode production",
     "build": "vite build",
+    "build:prod": "vite build --mode production",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:prod": "API_BASE_URL=http://47.103.75.34:3000 vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -16,6 +19,7 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/test-utils": "^2.4.10",
+    "cross-env": "^10.1.0",
     "jsdom": "^29.1.1",
     "vite": "^5.4.11",
     "vitest": "^4.1.6"
