@@ -723,7 +723,6 @@ onUnmounted(() => {
           <section v-else-if="phase === 'browse'" class="browse-screen">
             <header class="browse-head glass">
               <button type="button" class="link-ghost" @click="backToTags">← 返回标签</button>
-              <button type="button" class="link-ghost" @click="showProfile = true">👤 我的画像</button>
             </header>
 
             <div class="filter-bar glass">
@@ -820,8 +819,11 @@ onUnmounted(() => {
 
           <div v-if="modalProduct" class="modal-mask" role="presentation" @click.self="closeDetail">
             <div class="modal glass" role="dialog" aria-labelledby="modal-title">
-              <div class="modal-handle" aria-hidden="true"></div>
-              <button type="button" class="modal-close" aria-label="关闭" @click="closeDetail">×</button>
+              <div class="modal-header">
+                <button type="button" class="modal-back" aria-label="返回" @click="closeDetail">←</button>
+                <span class="modal-header-title">商品详情</span>
+                <button type="button" class="modal-close" aria-label="关闭" @click="closeDetail">×</button>
+              </div>
               
               <div class="modal-images">
                 <button type="button" class="modal-prev" @click="prevModalSlide" aria-label="上一张">‹</button>
@@ -1465,35 +1467,61 @@ onUnmounted(() => {
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
+  bottom: 70px;
+  background: rgba(0, 0, 0, 0.85);
   z-index: 100;
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .modal {
   width: 100%;
   max-width: 520px;
-  max-height: 90vh;
+  min-height: calc(100vh - 70px);
+  max-height: calc(100vh - 70px);
   margin: 0 auto;
   background: #1c1917;
-  border-radius: 12px 12px 0 0;
+  border-radius: 0;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-handle {
-  width: 48px;
-  height: 6px;
-  margin: 12px auto 0;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 999px;
+  display: none;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #1c1917;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.modal-back {
+  width: 32px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  border-radius: 50%;
+  color: #fafaf9;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-header-title {
+  font-size: 14px;
+  color: #fafaf9;
+  font-weight: 500;
 }
 
 .modal-close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
   width: 32px;
   height: 32px;
   background: rgba(255, 255, 255, 0.08);
@@ -1502,12 +1530,17 @@ onUnmounted(() => {
   color: #a8a29e;
   font-size: 18px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .modal-images {
   position: relative;
   height: 320px;
+  min-height: 320px;
   background: #0c0a09;
+  flex-shrink: 0;
 }
 
 .modal-prev,
@@ -1561,6 +1594,11 @@ onUnmounted(() => {
 
 .modal-body {
   padding: 16px;
+  padding-bottom: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .detail-name {
@@ -1584,10 +1622,13 @@ onUnmounted(() => {
   font-size: 13px;
   line-height: 1.6;
   color: #a8a29e;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .detail-related {
   margin-bottom: 20px;
+  flex-shrink: 0;
 }
 
 .related-title {
@@ -1630,6 +1671,7 @@ onUnmounted(() => {
 .modal-actions {
   display: flex;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .btn-outline {
