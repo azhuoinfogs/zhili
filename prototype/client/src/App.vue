@@ -137,11 +137,11 @@ const filterPayload = computed(() => ({
   relation: form.relation,
   age_band: form.ageBand,
   interests: form.interests,
-  occasion: listFilters.occasion || form.occasion,
-  budget: listFilters.budget || form.budget,
+  occasion: listFilters.occasion !== '' ? listFilters.occasion : '',
+  budget: listFilters.budget !== '' ? listFilters.budget : '',
   gender: form.gender,
   taboos: form.taboos,
-  style: listFilters.style || form.style
+  style: listFilters.style !== '' ? listFilters.style : ''
 }));
 
 function track(eventName, props = {}) {
@@ -166,9 +166,35 @@ function track(eventName, props = {}) {
 async function fetchRecommendations(reset = false, payload = null) {
   loading.value = reset;
   try {
+    const token = localStorage.getItem('zhili_token');
+    if (!token) {
+      showToast('请先登录');
+      loading.value = false;
+      loadingMore.value = false;
+      refreshing.value = false;
+      pullDistance.value = 0;
+      return;
+    }
     const q = encodeURIComponent(JSON.stringify(payload || profilePayload.value));
     const offset = reset ? 0 : products.value.length;
-    const r = await fetch(`/api/recommend?profile=${q}&offset=${offset}&limit=${PAGE_SIZE}`);
+    console.log('[客户端] 发送推荐请求:', { profile: payload || profilePayload.value, token: !!token });
+    const r = await fetch(`/api/recommend?profile=${q}&offset=${offset}&limit=${PAGE_SIZE}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    console.log('[客户端] 推荐请求响应:', r.status, r.statusText);
+    if (r.status === 401) {
+      showToast('登录已过期，请重新登录');
+      localStorage.removeItem('zhili_token');
+      localStorage.removeItem('zhili_user');
+      localStorage.removeItem('zhili_expires_at');
+      loggedIn.value = false;
+      currentPage.value = 'landing';
+      loading.value = false;
+      loadingMore.value = false;
+      refreshing.value = false;
+      pullDistance.value = 0;
+      return;
+    }
     if (r.ok) {
       const data = await r.json();
       if (reset) {
@@ -244,7 +270,7 @@ async function submitTags() {
   listFilters.budget = form.budget;
   listFilters.style = form.style;
   phase.value = 'browse';
-  await fetchRecommendations(true);
+  await fetchRecommendations(true, filterPayload.value);
 }
 
 function onBrowseScroll() {

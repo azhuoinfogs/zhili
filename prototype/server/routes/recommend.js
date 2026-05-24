@@ -39,11 +39,26 @@ function parseProfileIdQuery(q) {
 router.get('/', requireAuth, rateLimit, async (req, res) => {
   const startTime = Date.now();
   const q = req.query || {};
+  console.log('[知礼推荐] 收到请求:', JSON.stringify(q));
   const { page, size, offset, limit } = parsePageSize(q);
-  const shelf = shelfFromQuery(q);
   const group = q.zhili_group ?? q.group ?? 'B';
   const mode = pickHotOrPersonalized(group);
   const wantId = parseProfileIdQuery(q);
+  
+  let shelf = shelfFromQuery(q);
+  
+  if (q.profile) {
+    try {
+      const profileJson = JSON.parse(decodeURIComponent(q.profile));
+      shelf = {
+        occasion: profileJson.occasion || '',
+        budget: profileJson.budget || '',
+        style: profileJson.style || ''
+      };
+    } catch (e) {
+      console.warn('[知礼推荐] 从profile参数提取筛选条件失败:', e.message);
+    }
+  }
   
   let cacheHit = false;
   let dbQueryTime = 0;
@@ -55,37 +70,67 @@ router.get('/', requireAuth, rateLimit, async (req, res) => {
   }
 
   try {
-    let rows;
+    let profileRow = null;
+    let profileId = null;
     const dbStart = Date.now();
-    if (wantId != null) {
-      rows = await query(
-        `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
-         FROM user_profile WHERE id = ? AND user_id = ? LIMIT 1`,
-        [wantId, req.userId]
-      );
-      if (!rows.length) {
-        res.status(404).json({ error: 'NOT_FOUND', message: '画像不存在' });
-        return;
+    
+    if (q.profile) {
+      try {
+        const profileJson = JSON.parse(decodeURIComponent(q.profile));
+        profileRow = {
+          id: 0,
+          user_id: req.userId,
+          name: 'temp',
+          relation: profileJson.relation || '',
+          gender: profileJson.gender || '',
+          age_band: profileJson.age_band || profileJson.ageBand || '',
+          budget: profileJson.budget || '',
+          occasion: profileJson.occasion || '',
+          style: profileJson.style || '',
+          interests: profileJson.interests ? JSON.stringify(profileJson.interests) : '[]',
+          taboos: profileJson.taboos ? JSON.stringify(profileJson.taboos) : '[]',
+          is_default: 0,
+          created_at: new Date(),
+          updated_at: new Date()
+        };
+        profileId = 0;
+      } catch (e) {
+        console.warn('[知礼推荐] 解析profile参数失败:', e.message);
       }
-    } else {
-      rows = await query(
-        `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
-         FROM user_profile WHERE user_id = ? AND is_default = 1 ORDER BY id ASC LIMIT 1`,
-        [req.userId]
-      );
-      if (!rows.length) {
-        res.status(404).json({ error: 'NO_DEFAULT_PROFILE', message: '请先创建画像并设为默认' });
-        return;
+    }
+
+    if (!profileRow) {
+      let rows;
+      if (wantId != null) {
+        rows = await query(
+          `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
+           FROM user_profile WHERE id = ? AND user_id = ? LIMIT 1`,
+          [wantId, req.userId]
+        );
+        if (!rows.length) {
+          res.status(404).json({ error: 'NOT_FOUND', message: '画像不存在' });
+          return;
+        }
+      } else {
+        rows = await query(
+          `SELECT id, user_id, name, relation, gender, age_band, budget, occasion, style, interests, taboos, is_default, created_at, updated_at
+           FROM user_profile WHERE user_id = ? AND is_default = 1 ORDER BY id ASC LIMIT 1`,
+          [req.userId]
+        );
+        if (!rows.length) {
+          res.status(404).json({ error: 'NO_DEFAULT_PROFILE', message: '请先创建画像并设为默认' });
+          return;
+        }
       }
+      profileRow = rows[0];
+      profileId = Number(profileRow.id);
     }
     dbQueryTime = Date.now() - dbStart;
 
-    const profileRow = rows[0];
-    const profileId = Number(profileRow.id);
     const cacheKey = recommendListCacheKey(req.userId, profileId, shelf, group);
     const redis = getRedis();
 
-    if (redis) {
+    if (redis && profileId !== 0) {
       try {
         const cached = await redis.get(cacheKey);
         if (cached) {
